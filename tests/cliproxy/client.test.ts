@@ -4,7 +4,7 @@ import {
   discoverProviderModels,
   extractSortedModelIds,
   type FetchLike,
-} from './client.ts';
+} from '../../src/cliproxy/client.ts';
 
 describe('model discovery helpers', () => {
   it('deduplicates and sorts model ids lexicographically', () => {

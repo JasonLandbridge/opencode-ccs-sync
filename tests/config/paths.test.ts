@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { expandHomePath, resolveCcsConfigPath, resolveOpenCodeConfigPath } from './paths.ts';
+import {
+  expandHomePath,
+  resolveCcsConfigPath,
+  resolveOpenCodeConfigPath,
+} from '../../src/config/paths.ts';
 
 describe('config path resolution', () => {
   it('expands a leading tilde with the provided home directory', () => {

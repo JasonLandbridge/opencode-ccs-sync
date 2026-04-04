@@ -1,8 +1,8 @@
 import { watch } from 'chokidar';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import type { RunSyncOptions, SyncResult } from '../sync/service.ts';
-import { runSync } from '../sync/service.ts';
+import type { RunSyncOptions, SyncResult } from '../sync/service.js';
+import { runSync } from '../sync/service.js';
 
 export interface WriteLoopGuard {
   markWritten(contentHash: string): void;

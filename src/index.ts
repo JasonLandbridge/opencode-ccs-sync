@@ -1,9 +1,9 @@
 import type { Plugin, PluginModule } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin';
 import { readFile, writeFile } from 'node:fs/promises';
-import { discoverProviderModels } from './cliproxy/client.ts';
-import { runSync } from './sync/service.ts';
-import { runWatchMode } from './watch/watch.ts';
+import { discoverProviderModels } from './cliproxy/client.js';
+import { runSync } from './sync/service.js';
+import { runWatchMode } from './watch/watch.js';
 
 interface PluginDependencies {
   runSync: typeof runSync;

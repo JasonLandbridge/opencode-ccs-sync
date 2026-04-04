@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeCcsConfig, parseCcsConfig } from './ccs.ts';
+import { normalizeCcsConfig, parseCcsConfig } from '../../src/config/ccs.ts';
 
 describe('CCS config normalization', () => {
   it('normalizes runtime URL, providers, and ANTHROPIC_MODEL', () => {

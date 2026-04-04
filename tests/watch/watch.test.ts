@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createWriteLoopGuard } from './watch.ts';
+import { createWriteLoopGuard } from '../../src/watch/watch.ts';
 
 describe('createWriteLoopGuard', () => {
   it('suppresses a matching self-written hash during the suppression window', () => {

@@ -70,14 +70,14 @@ models/providers.
 
 ## Install in OpenCode
 
-OpenCode supports loading plugins either from npm or from local files.
+OpenCode supports loading plugins either from a package name in config or from local files.
 
 Official docs:
 
 - OpenCode config: <https://opencode.ai/docs/config/>
 - OpenCode plugins: <https://opencode.ai/docs/plugins/>
 
-### Option A: install from npm
+### Option A: install by package name
 
 Add this package to the `plugin` array in your OpenCode config.
 
@@ -90,7 +90,7 @@ Example:
 }
 ```
 
-OpenCode installs npm plugins automatically with Bun at startup.
+OpenCode resolves and installs package-based plugins automatically with Bun at startup.
 
 ### Option B: test locally from a plugin file
 
@@ -353,7 +353,7 @@ You have two practical options.
 
 #### Option 1: use the package name through OpenCode config
 
-This is the normal user path once the package is published:
+This is the normal user path once the package is published and available to Bun:
 
 ```jsonc
 {

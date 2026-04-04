@@ -1,42 +1,42 @@
 # Release Process
 
-This project uses Release Please and Npm Trusted Publishing for automated releases.
+This project uses Release Please and npm Trusted Publishing for automated releases.
 
 It follows two release channels:
 
-- **Pre-release**: Normal PRs merged to main create `x.x.x-next.J` versions published to the `next` npm dist-tag for testing and feedback.
-- **Stable Releases**: Release PRs merged to main create computed version and publish to the `latest` npm dist-tag.
+- **Pre-release**: Normal PRs merged to main create `x.x.x-next.J` versions published to the `next` dist-tag for testing and feedback.
+- **Stable Releases**: Release PRs merged to main create computed versions and publish to the `latest` dist-tag.
 
-You can also trigger manual releases in the follow ways: 
+You can also trigger manual releases in the follow ways:
 
 - Push a tag in the format `v{semver}` (e.g. `v1.2.3`)
 - Run the `publish.yml` workflow manually from the GitHub Actions tab and supply a channel 'latest' or 'next'.
 
-
 ## First Release
 
-Before automated releases will work, you need to perform the first release manually. 
+Before automated releases will work, you need to perform the first release manually.
 
-Why: 
+Why:
 
-- This uses [Npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers).
-- The first release creates the npm package on npmjs.com.
+- This uses [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers).
+- The first release creates the package on npmjs.com.
 - This then allows you to setup trusted publishing with GitHub Actions for future releases.
 
 ### Steps
 
-1. make sure the `package.json` is correct: 
-  - is the version `0.0.1` ? 
-  - is the pkg name correct? Did you forget to set the scope if needed?
-  - do you have the right keywords? 
-  - do you have the right repository field?
-  - do you have the right author field?
+1. make sure the `package.json` is correct:
 
-2. run `npm login` to authenticate with npm. 
+- is the version `0.0.1` ?
+- is the pkg name correct? Did you forget to set the scope if needed?
+- do you have the right keywords?
+- do you have the right repository field?
+- do you have the right author field?
 
-3. run `mise build` to build the module.
+2. run `bunx npm login` to authenticate with the npm registry.
 
-4. run `mise publish --otp {your-2fa-code}` to publish the first version.
+3. run `bun run build` and `bun run build:types` to build the module.
+
+4. run `bun publish --access public` to publish the first version.
 
 5. Go to your npm package settings on npmjs.com and add a trusted publisher for GitHub Actions with:
    - **Organization or user**: Your GitHub username/org
@@ -44,7 +44,6 @@ Why:
    - **Workflow filename**: `publish.yml` (the release workflow filename)
 
 6. [Restrict token access](https://docs.npmjs.com/trusted-publishers#recommended-restrict-token-access-when-using-trusted-publishers) for maximum security.
-
 
 ## Release Workflow
 
@@ -165,11 +164,11 @@ Available markers:
 
 ## Publishing
 
-Releases are automatically published to NPM when the Release Please PR is merged.
+Releases are automatically published to the npm registry when the Release Please PR is merged.
 
-### NPM Trusted Publishing
+### npm Trusted Publishing
 
-This project uses [NPM Trusted Publishing](https://docs.npmjs.com/trusted-publishers) with GitHub Actions. No npm tokens are needed - authentication is handled automatically via OIDC (OpenID Connect).
+This project uses [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers) with GitHub Actions. No npm tokens are needed - authentication is handled automatically via OIDC (OpenID Connect).
 
 **How it works:**
 
@@ -190,7 +189,7 @@ This project uses [NPM Trusted Publishing](https://docs.npmjs.com/trusted-publis
 When you merge a release PR, the GitHub Actions workflow will automatically:
 
 1. Build the module
-2. Publish to NPM with OIDC authentication
+2. Publish to the npm registry with OIDC authentication
 3. Generate and attach provenance attestations
 4. Create a GitHub release
 
@@ -206,7 +205,7 @@ git push origin v1.2.3
 This will:
 
 1. Trigger the release workflow
-2. Build and publish to NPM using trusted publishing
+2. Build and publish to the npm registry using trusted publishing
 3. Create a GitHub release
 
 Use manual releases for:

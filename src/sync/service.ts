@@ -1,7 +1,7 @@
 import type { ProviderConfig } from '@opencode-ai/sdk';
-import { normalizeCcsConfig, parseCcsConfig } from '../config/ccs.ts';
-import { resolveCcsConfigPath, resolveOpenCodeConfigPath } from '../config/paths.ts';
-import { applyManagedConfigSync, hasEffectiveChanges } from '../opencode/patch.ts';
+import { normalizeCcsConfig, parseCcsConfig } from '../config/ccs.js';
+import { resolveCcsConfigPath, resolveOpenCodeConfigPath } from '../config/paths.js';
+import { applyManagedConfigSync, hasEffectiveChanges } from '../opencode/patch.js';
 
 export interface SyncResult {
   ok: boolean;

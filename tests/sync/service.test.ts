@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runSync } from './service.ts';
+import { runSync } from '../../src/sync/service.ts';
 
 describe('runSync', () => {
   it('returns a dry-run result without writing files', async () => {

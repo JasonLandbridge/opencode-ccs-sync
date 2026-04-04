@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import pluginModule, { createServer, server } from './index.ts';
-import type { SyncResult } from './sync/service.ts';
+import pluginModule, { createServer, server } from '../src/index.ts';
+import type { SyncResult } from '../src/sync/service.ts';
 
 function createSyncResult(input: SyncResult): SyncResult {
   return input;

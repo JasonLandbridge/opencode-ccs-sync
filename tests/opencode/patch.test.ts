@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyManagedConfigSync, hasEffectiveChanges } from './patch.ts';
+import { applyManagedConfigSync, hasEffectiveChanges } from '../../src/opencode/patch.ts';
 
 describe('OpenCode JSONC patching', () => {
   it('updates only ccs-managed entries and preserves comments', () => {

@@ -1,4 +1,4 @@
-import { nextBackoffDelayMs } from '../utils/backoff.ts';
+import { nextBackoffDelayMs } from '../utils/backoff.js';
 
 interface ModelRecord {
   id?: unknown;
