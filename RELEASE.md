@@ -4,8 +4,8 @@ This project uses Release Please and npm Trusted Publishing for automated releas
 
 It follows two release channels:
 
-- **Pre-release**: Normal PRs merged to master create `x.x.x-next.J` versions published to the `next` dist-tag for testing and feedback.
-- **Stable Releases**: Release PRs merged to master create computed versions and publish to the `latest` dist-tag.
+- **Release PRs**: Normal commits merged to master update or create a Release Please PR. This does not publish a package by itself.
+- **Published Releases**: A package publish only happens when Release Please creates a real GitHub release, so every npm publish corresponds to a GitHub release.
 
 You can also trigger manual releases in the follow ways:
 
@@ -70,6 +70,7 @@ While version is `0.x.x`, breaking changes bump **minor** version.
    - Create a release PR
 
 3. Review and merge the Release Please PR
+4. When Release Please creates the GitHub release, the publish workflow runs and publishes the package to npm
 
 ### Commit Message Examples
 

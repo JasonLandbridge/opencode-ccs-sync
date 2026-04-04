@@ -17,7 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       releases_created: ${{ steps.release-please.outputs.releases_created }}
-      prs_created: ${{ steps.release-please.outputs.prs_created }}
     steps:
       - uses: google-github-actions/release-please-action@v4
         id: release-please
@@ -29,20 +28,11 @@ jobs:
   dispatch-publish:
     needs: process
     runs-on: ubuntu-latest
-    if: needs.process.outputs.releases_created == 'true' || needs.process.outputs.prs_created == 'true'
+    if: needs.process.outputs.releases_created == 'true'
     steps:
       - name: Dispatch publish for releases
-        if: needs.process.outputs.releases_created == 'true'
         uses: peter-evans/repository-dispatch@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: publish-package
           client-payload: '{"tag": "latest"}'
-
-      - name: Dispatch publish for prerelease
-        if: needs.process.outputs.prs_created == 'true'
-        uses: peter-evans/repository-dispatch@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          event-type: publish-package
-          client-payload: '{"tag": "next"}'
