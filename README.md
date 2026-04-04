@@ -15,10 +15,10 @@ It is designed to be safe and repeatable:
 
 You MUST have all of the following working first:
 
-1. **OpenCode installed and running**
-2. **CCS installed and configured**
-3. **CLIProxy reachable from your machine**
-4. **A CCS config file at `~/.ccs/config.yaml`**
+1. **[OpenCode installed and running](https://opencode.ai/)** 
+2. **[CCS installed and configured](https://docs.ccs.kaitran.ca)**
+3. **[CLIProxy reachable from your machine](https://help.router-for.me/)**
+4. **A CCS config file at `~/.ccs/config.yaml`, see CCS Install** 
 
 If CCS itself is not healthy, this plugin cannot fix that for you. It only syncs CCS state
 into OpenCode.
@@ -63,7 +63,6 @@ The normal user flow is therefore:
 3. let the plugin perform its automatic startup sync
 4. edit CCS config as needed and let the plugin re-sync automatically
 
-The plugin does **not** require an interactive setup wizard.
 
 ## Managed scope
 
@@ -79,15 +78,6 @@ It does **not** touch unrelated entries like `openai`, `anthropic`, or any non-`
 providers.
 
 ## Install in OpenCode
-
-OpenCode supports loading plugins either from a package name in config or from local files.
-
-Official docs:
-
-- OpenCode config (global + project locations): <https://opencode.ai/docs/config/#global>
-- OpenCode plugins: <https://opencode.ai/docs/plugins/>
-- CCS repository: <https://github.com/kaitranntt/ccs>
-- CCS docs: <https://docs.ccs.kaitran.ca>
 
 ### Option A: install by package name
 
@@ -129,9 +119,6 @@ It resolves your OpenCode config in this order:
 2. `./opencode.jsonc`
 3. `~/.config/opencode/opencode.json`
 4. `~/.config/opencode/opencode.jsonc`
-
-You SHOULD normally let the plugin discover the correct file by convention instead of pointing it
-at a path manually.
 
 ## Where to put the CCS config
 
@@ -265,16 +252,6 @@ That means:
 This automatic lifecycle is the primary user-facing behavior. You SHOULD think of this as a
 background syncing plugin, not a manual command you have to keep invoking.
 
-## Internal tool surface
-
-The plugin still exposes an internal `ccs_sync` tool for automation and deep debugging, but that
-is **not** the normal user workflow.
-
-For normal use, you SHOULD install the plugin, restart OpenCode, and let the plugin handle:
-
-- startup sync automatically
-- provider/model narrowing automatically
-- automatic re-sync when the CCS config changes
 
 ## How default model selection works
 
@@ -458,24 +435,6 @@ Common causes of confusion:
 - providers appear in `cliproxy.providers` but do not have live Anthropic-compatible `*.settings.json` files
 - CLIProxy is reachable but a discovered model is not explicitly selected in the live provider settings, so it is intentionally omitted
 - expecting non-`ccs-*` providers/models to be modified
-
-## Development coverage
-
-Unit tests currently cover:
-
-- cross-platform path resolution
-- CCS config parsing and normalization
-- model extraction, retry classification, and network discovery
-- narrowing providers from live `~/.ccs/*.settings.json`
-- narrowing provider-local models from `ANTHROPIC_MODEL` and `ANTHROPIC_DEFAULT_*`
-- JSONC patching with comment preservation
-- `ccs-*` ownership boundaries
-- deterministic default model selection
-- dry-run behavior and idempotency
-- plugin tool registration and JSON output
-- watch-mode write-loop suppression
-- startup auto-sync on plugin load
-- automatic re-sync when the CCS config changes
 
 ## License
 
