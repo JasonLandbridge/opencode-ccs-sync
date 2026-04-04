@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import { parseDocument } from 'yaml';
 
 const DEFAULT_RUNTIME_BASE_URL: string = 'http://127.0.0.1:3456';
@@ -16,10 +17,36 @@ interface RawEnvConfig {
   ANTHROPIC_MODEL?: unknown;
 }
 
+interface RawCliProxyConfig {
+  providers?: unknown;
+}
+
+interface RawCliProxyServerLocalConfig {
+  port?: unknown;
+}
+
+interface RawCliProxyServerConfig {
+  local?: RawCliProxyServerLocalConfig;
+}
+
+interface RawProviderSettingsEnv {
+  ANTHROPIC_BASE_URL?: unknown;
+  ANTHROPIC_MODEL?: unknown;
+  ANTHROPIC_DEFAULT_OPUS_MODEL?: unknown;
+  ANTHROPIC_DEFAULT_SONNET_MODEL?: unknown;
+  ANTHROPIC_DEFAULT_HAIKU_MODEL?: unknown;
+}
+
+interface RawProviderSettings {
+  env?: RawProviderSettingsEnv;
+}
+
 interface RawCcsConfig {
   env?: RawEnvConfig;
   providers?: unknown;
   defaultProvider?: unknown;
+  cliproxy?: RawCliProxyConfig;
+  cliproxy_server?: RawCliProxyServerConfig;
 }
 
 function asTrimmedString(value: unknown): string | undefined {
@@ -43,6 +70,99 @@ function normalizeProviders(input: unknown): string[] {
   return Array.from(new Set(providers)).sort((left, right) => left.localeCompare(right));
 }
 
+function asPortNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsedValue = Number.parseInt(value.trim(), 10);
+    if (Number.isInteger(parsedValue) && parsedValue > 0) {
+      return parsedValue;
+    }
+  }
+
+  return undefined;
+}
+
+function isProviderSettingsFile(fileName: string): boolean {
+  return fileName.endsWith('.settings.json') && !fileName.startsWith('.');
+}
+
+function providerNameFromSettingsFile(fileName: string): string | undefined {
+  if (!isProviderSettingsFile(fileName)) {
+    return undefined;
+  }
+
+  return asTrimmedString(basename(fileName, '.settings.json'));
+}
+
+export function inferProvidersFromSettingsFiles(settingsFiles: Record<string, string>): string[] {
+  const configuredProviders = Object.entries(settingsFiles)
+    .map(([fileName, content]) => {
+      const providerName = providerNameFromSettingsFile(fileName);
+      if (!providerName) {
+        return undefined;
+      }
+
+      try {
+        const parsed = JSON.parse(content) as RawProviderSettings;
+        const anthropicBaseUrl = asTrimmedString(parsed?.env?.ANTHROPIC_BASE_URL);
+        const anthropicModel = asTrimmedString(parsed?.env?.ANTHROPIC_MODEL);
+
+        return anthropicBaseUrl || anthropicModel ? providerName : undefined;
+      } catch {
+        return undefined;
+      }
+    })
+    .filter((provider): provider is string => provider !== undefined);
+
+  return Array.from(new Set(configuredProviders)).sort((left, right) => left.localeCompare(right));
+}
+
+export function inferProviderSelectionsFromSettingsFiles(
+  settingsFiles: Record<string, string>
+): Record<string, string[]> {
+  const selections = Object.fromEntries(
+    Object.entries(settingsFiles)
+      .map(([fileName, content]) => {
+        const providerName = providerNameFromSettingsFile(fileName);
+        if (!providerName) {
+          return undefined;
+        }
+
+        try {
+          const parsed = JSON.parse(content) as RawProviderSettings;
+          const env = parsed?.env;
+          const anthropicBaseUrl = asTrimmedString(env?.ANTHROPIC_BASE_URL);
+          if (!anthropicBaseUrl) {
+            return undefined;
+          }
+
+          const selectedModels = [
+            asTrimmedString(env?.ANTHROPIC_MODEL),
+            asTrimmedString(env?.ANTHROPIC_DEFAULT_OPUS_MODEL),
+            asTrimmedString(env?.ANTHROPIC_DEFAULT_SONNET_MODEL),
+            asTrimmedString(env?.ANTHROPIC_DEFAULT_HAIKU_MODEL),
+          ].filter((model): model is string => model !== undefined);
+
+          const uniqueSelectedModels = Array.from(new Set(selectedModels)).sort((left, right) =>
+            left.localeCompare(right)
+          );
+
+          return uniqueSelectedModels.length > 0 ? [providerName, uniqueSelectedModels] : undefined;
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((entry): entry is [string, string[]] => entry !== undefined)
+  ) as Record<string, string[]>;
+
+  return Object.fromEntries(
+    Object.entries(selections).sort(([left], [right]) => left.localeCompare(right))
+  );
+}
+
 export function parseCcsConfig(input: string): unknown {
   const document = parseDocument(input);
   if (document.errors.length > 0) {
@@ -56,12 +176,23 @@ export function normalizeCcsConfig(input: unknown): NormalizedCcsConfig {
   const rawConfig: RawCcsConfig =
     typeof input === 'object' && input !== null ? (input as RawCcsConfig) : {};
   const env: RawEnvConfig = rawConfig.env ?? {};
+  const cliproxy: RawCliProxyConfig = rawConfig.cliproxy ?? {};
+  const cliproxyServer: RawCliProxyServerConfig = rawConfig.cliproxy_server ?? {};
 
-  const selectedProviders: string[] = normalizeProviders(rawConfig.providers);
+  const selectedProviders: string[] =
+    normalizeProviders(rawConfig.providers).length > 0
+      ? normalizeProviders(rawConfig.providers)
+      : normalizeProviders(cliproxy.providers);
   const defaultProvider: string | undefined = asTrimmedString(rawConfig.defaultProvider);
   const anthropicModel: string | undefined = asTrimmedString(env.ANTHROPIC_MODEL);
+  const derivedLocalRuntimeBaseUrl: string | undefined = (() => {
+    const localPort = asPortNumber(cliproxyServer.local?.port);
+    return localPort ? `http://127.0.0.1:${localPort}` : undefined;
+  })();
   const runtimeBaseUrl: string =
-    asTrimmedString(env.CLI_PROXY_BASE_URL) ?? DEFAULT_RUNTIME_BASE_URL;
+    asTrimmedString(env.CLI_PROXY_BASE_URL) ??
+    derivedLocalRuntimeBaseUrl ??
+    DEFAULT_RUNTIME_BASE_URL;
 
   return {
     runtimeBaseUrl,

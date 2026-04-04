@@ -1,12 +1,12 @@
 # opencode-ccs-sync
 
-`opencode-ccs-sync` is an OpenCode plugin that reads your CCS configuration, asks
-CLIProxy which models are available for each CCS provider, and writes those providers and
-models into your OpenCode config as managed `ccs-*` entries.
+`opencode-ccs-sync` is an OpenCode plugin that reads your CCS configuration, inspects the
+live CCS provider settings files in `~/.ccs`, validates the resulting model choices against
+CLIProxy, and writes those managed `ccs-*` providers into your OpenCode config.
 
 It is designed to be safe and repeatable:
 
-- it only manages `ccs-*` providers and models
+- it only manages `ccs-*` providers and their provider-local model lists
 - it preserves unrelated OpenCode config and JSONC comments
 - it chooses one deterministic global default model for OpenCode
 - it supports dry runs and long-running watch mode
@@ -48,10 +48,12 @@ When you call the `ccs_sync` tool, it does this in order:
 1. Resolves the OpenCode config path
 2. Resolves the CCS config path
 3. Parses and normalizes CCS config values
-4. Discovers models from CLIProxy for each selected provider
-5. Rewrites only the managed `ccs-*` sections in your OpenCode config
-6. Chooses one global OpenCode `model` value deterministically
-7. Returns a structured JSON result describing what changed
+4. Inspects live `~/.ccs/*.settings.json` files to determine which providers are actually in use
+5. Extracts the explicit selected/default models for each live provider from Anthropic-compatible env values
+6. Validates those model choices against CLIProxy discovery for each provider
+7. Rewrites only the managed `ccs-*` sections in your OpenCode config
+8. Chooses one global OpenCode `model` value deterministically
+9. Returns a structured JSON result describing what changed
 
 The plugin does **not** prompt interactively. All input comes from JSON tool arguments.
 
@@ -62,11 +64,11 @@ This plugin only owns entries prefixed with `ccs-`.
 It may create, update, or remove:
 
 - `provider.ccs-*`
-- `models["ccs-*/..."]`
+- `provider.ccs-*.models`
 - the global `model` field when a CCS default model is selected
 
 It does **not** touch unrelated entries like `openai`, `anthropic`, or any non-`ccs-*`
-models/providers.
+providers.
 
 ## Install in OpenCode
 
@@ -136,14 +138,23 @@ CCS reference:
 
 - CCS repository/README: <https://github.com/kaitranntt/ccs>
 
-## Minimal CCS config this plugin understands
+## CCS inputs this plugin actually uses
 
-The plugin normalizes these CCS fields:
+The plugin reads two kinds of CCS inputs:
+
+1. `~/.ccs/config.yaml` for high-level runtime details such as:
 
 - `env.CLI_PROXY_BASE_URL`
 - `env.ANTHROPIC_MODEL`
 - `providers`
 - `defaultProvider`
+- `cliproxy.providers`
+- `cliproxy_server.local.port`
+
+2. Live `~/.ccs/*.settings.json` files for the real provider/model selections that SHOULD be
+   exposed in OpenCode.
+
+Those settings files are the main source of truth for narrowing what gets registered.
 
 Example:
 
@@ -157,7 +168,8 @@ providers:
 defaultProvider: claude
 ```
 
-If `CLI_PROXY_BASE_URL` is missing, the plugin defaults to:
+If `CLI_PROXY_BASE_URL` is missing, the plugin can derive the runtime URL from
+`cliproxy_server.local.port`. If neither value exists, it defaults to:
 
 ```text
 http://127.0.0.1:3456
@@ -168,6 +180,71 @@ The plugin always uses this bearer token when talking to CLIProxy:
 ```text
 ccs-internal-managed
 ```
+
+## How provider selection really works
+
+The plugin does **not** register every provider listed in the broad CCS cliproxy pool.
+
+Instead, it prefers live provider settings files in `~/.ccs/`, such as:
+
+- `codex.settings.json`
+- `claude.settings.json`
+- `ghcp.settings.json`
+
+A provider is treated as actually configured only when its live settings file contains an
+Anthropic-compatible env marker such as:
+
+- `ANTHROPIC_BASE_URL`
+- `ANTHROPIC_MODEL`
+
+Files that do not expose those env values are ignored for OpenCode registration. That means a
+file like `agy.settings.json` with hooks only will not create `ccs-agy` in OpenCode.
+
+If no live settings files can be used, the plugin falls back to the broader provider list from
+`config.yaml`.
+
+## How model selection really works
+
+For each kept provider, the plugin does **not** expose the full discovery universe from CLIProxy.
+
+Instead, it builds a per-provider allowlist from the live provider settings file using these env
+keys:
+
+- `ANTHROPIC_MODEL`
+- `ANTHROPIC_DEFAULT_OPUS_MODEL`
+- `ANTHROPIC_DEFAULT_SONNET_MODEL`
+- `ANTHROPIC_DEFAULT_HAIKU_MODEL`
+
+That explicit model set is then validated against the provider’s discovered CLIProxy models.
+
+So the final provider-local model list is:
+
+1. models explicitly selected in the provider’s live CCS settings file
+2. filtered to those that actually exist in discovery
+
+This is why the plugin no longer writes giant mixed model lists under every `ccs-*` provider.
+
+### Example
+
+If `codex.settings.json` contains:
+
+```json
+{
+  "env": {
+    "ANTHROPIC_MODEL": "gpt-5.3-codex",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "gpt-5.3-codex",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-5.3-codex",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5-codex-mini"
+  }
+}
+```
+
+then `ccs-codex.models` SHOULD end up containing only:
+
+- `gpt-5.3-codex`
+- `gpt-5-codex-mini`
+
+not unrelated models such as `gpt-4o`, Gemini models, or Claude models.
 
 ## The OpenCode tool this plugin adds
 
@@ -229,7 +306,7 @@ When multiple CCS providers are available, it chooses deterministically:
 
 1. sort provider IDs lexicographically
 2. pick the first provider
-3. inside that provider, prefer `ANTHROPIC_MODEL` if it exists in the discovered models
+3. inside that provider, prefer `ANTHROPIC_MODEL` if it exists in the final validated provider model list
 4. otherwise pick the first lexicographically sorted model ID
 
 The final written format is always:
@@ -257,17 +334,24 @@ Example generated shape:
         "baseURL": "http://127.0.0.1:3456/api/provider/claude/v1",
         "apiKey": "ccs-internal-managed",
       },
+      "models": {
+        "claude-sonnet-4-6": {
+          "name": "Claude Sonnet 4 6",
+        },
+        "claude-opus-4-6": {
+          "name": "Claude Opus 4 6",
+        },
+        "claude-haiku-4-5-20251001": {
+          "name": "Claude Haiku 4 5 20251001",
+        },
+      },
     },
   },
-  "models": {
-    "ccs-claude/claude-sonnet-4": {
-      "provider": "ccs-claude",
-      "id": "claude-sonnet-4",
-    },
-  },
-  "model": "ccs-claude/claude-sonnet-4",
+  "model": "ccs-claude/claude-sonnet-4-6",
 }
 ```
+
+Important: there is **no** root-level `models` block. OpenCode expects provider-local `models`.
 
 ## JSON result returned by `ccs_sync`
 
@@ -329,7 +413,8 @@ If you want the quickest end-to-end validation, follow this order:
 4. add the plugin to OpenCode
 5. call `ccs_sync` with `dryRun: true`
 6. inspect the returned `resolvedPaths`, `providers`, and `defaultModel`
-7. call it again without `dryRun` to write the config
+7. confirm each generated `provider.ccs-*` contains only the models explicitly selected in the matching live `~/.ccs/*.settings.json` file
+8. call it again without `dryRun` to write the config
 
 That gives you one safe preview run before touching your OpenCode config.
 
@@ -408,17 +493,19 @@ Run ccs_sync with {"dryRun": true, "opencodeConfigPath": "./opencode.json"}
 If sync does not behave as expected, check these in order:
 
 1. `ccs doctor`
-2. verify `~/.ccs/config.yaml` exists and contains the provider IDs you expect
-3. verify CLIProxy is reachable at `CLI_PROXY_BASE_URL`
-4. run `ccs_sync` with `dryRun: true`
-5. inspect `resolvedPaths` in the JSON result
-6. if your OpenCode config is actually `opencode.json`, pass `opencodeConfigPath` explicitly
+2. verify `~/.ccs/config.yaml` exists and CLIProxy is pointed at the expected local server
+3. verify the live `~/.ccs/*.settings.json` files contain the providers and Anthropic model envs you actually expect OpenCode to expose
+4. verify CLIProxy is reachable at `CLI_PROXY_BASE_URL` or the derived local cliproxy port
+5. run `ccs_sync` with `dryRun: true`
+6. inspect `resolvedPaths` in the JSON result
+7. if your OpenCode config is actually `opencode.json`, pass `opencodeConfigPath` explicitly
 
 Common causes of confusion:
 
 - using `opencode.json` while this plugin is defaulting to `opencode.jsonc`
 - CCS is installed but not healthy yet
-- providers exist in CCS config but CLIProxy is not reachable
+- providers appear in `cliproxy.providers` but do not have live Anthropic-compatible `*.settings.json` files
+- CLIProxy is reachable but a discovered model is not explicitly selected in the live provider settings, so it is intentionally omitted
 - expecting non-`ccs-*` providers/models to be modified
 
 ## Development coverage
@@ -428,6 +515,8 @@ Unit tests currently cover:
 - cross-platform path resolution
 - CCS config parsing and normalization
 - model extraction, retry classification, and network discovery
+- narrowing providers from live `~/.ccs/*.settings.json`
+- narrowing provider-local models from `ANTHROPIC_MODEL` and `ANTHROPIC_DEFAULT_*`
 - JSONC patching with comment preservation
 - `ccs-*` ownership boundaries
 - deterministic default model selection
