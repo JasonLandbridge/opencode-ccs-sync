@@ -23,7 +23,18 @@ describe('config path resolution', () => {
     ).toBe('/tmp/custom.jsonc');
   });
 
-  it('falls back to project opencode.jsonc before global config', () => {
+  it('prefers project opencode.json before opencode.jsonc', () => {
+    expect(
+      resolveOpenCodeConfigPath({
+        cwd: '/workspace',
+        homeDir: '/home/test',
+        exists: (candidate: string) =>
+          candidate === '/workspace/opencode.json' || candidate === '/workspace/opencode.jsonc',
+      })
+    ).toBe('/workspace/opencode.json');
+  });
+
+  it('falls back to project opencode.jsonc when opencode.json is absent', () => {
     expect(
       resolveOpenCodeConfigPath({
         cwd: '/workspace',
@@ -33,12 +44,22 @@ describe('config path resolution', () => {
     ).toBe('/workspace/opencode.jsonc');
   });
 
-  it('falls back to the global OpenCode config when the project file is absent', () => {
+  it('falls back to the global opencode.json when project files are absent', () => {
     expect(
       resolveOpenCodeConfigPath({
         cwd: '/workspace',
         homeDir: '/home/test',
-        exists: () => false,
+        exists: (candidate: string) => candidate === '/home/test/.config/opencode/opencode.json',
+      })
+    ).toBe('/home/test/.config/opencode/opencode.json');
+  });
+
+  it('falls back to global opencode.jsonc when only the JSONC file exists', () => {
+    expect(
+      resolveOpenCodeConfigPath({
+        cwd: '/workspace',
+        homeDir: '/home/test',
+        exists: (candidate: string) => candidate === '/home/test/.config/opencode/opencode.jsonc',
       })
     ).toBe('/home/test/.config/opencode/opencode.jsonc');
   });

@@ -1,5 +1,6 @@
 import type { Plugin, PluginModule } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin';
+import { existsSync } from 'node:fs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { discoverProviderModels } from './cliproxy/client.js';
 import { runSync } from './sync/service.js';
@@ -12,6 +13,7 @@ interface PluginDependencies {
   readDir: typeof readdir;
   writeFile: typeof writeFile;
   discoverProviderModels: typeof discoverProviderModels;
+  pathExists: (filePath: string) => boolean;
   homeDir: string;
 }
 
@@ -56,6 +58,7 @@ function createDefaultDependencies(): PluginDependencies {
     readDir: readdir,
     writeFile,
     discoverProviderModels,
+    pathExists: existsSync,
     homeDir: process.env.HOME ?? process.env.USERPROFILE ?? '',
   };
 }
@@ -66,10 +69,6 @@ function createSharedOptions(
   args: {
     dryRun?: boolean;
     watch?: boolean;
-    opencodeConfigPath?: string;
-    ccsConfigPath?: string;
-    providers?: string[];
-    includeModelFamilies?: string[];
   },
   abortSignal: AbortSignal
 ) {
@@ -78,11 +77,8 @@ function createSharedOptions(
     watch: args.watch,
     cwd: input.directory,
     homeDir: dependencies.homeDir,
-    opencodeConfigPath: args.opencodeConfigPath,
-    ccsConfigPath: args.ccsConfigPath,
-    providers: args.providers,
-    includeModelFamilies: args.includeModelFamilies,
     abortSignal,
+    pathExists: dependencies.pathExists,
     readFile: (filePath: string) => dependencies.readFile(filePath, 'utf8'),
     readDir: (directoryPath: string) => dependencies.readDir(directoryPath),
     writeFile: (filePath: string, content: string) =>
@@ -115,13 +111,8 @@ export function createServer(dependencies: PluginDependencies): Plugin {
     return {
       tool: {
         ccs_sync: tool({
-          description:
-            'Synchronize CCS-managed providers and models into opencode.jsonc deterministically.',
+          description: 'Synchronize CCS-managed providers and models into OpenCode by convention.',
           args: {
-            opencodeConfigPath: tool.schema.string().optional(),
-            ccsConfigPath: tool.schema.string().optional(),
-            providers: tool.schema.array(tool.schema.string()).optional(),
-            includeModelFamilies: tool.schema.array(tool.schema.string()).optional(),
             dryRun: tool.schema.boolean().optional(),
             watch: tool.schema.boolean().optional(),
           },
@@ -129,10 +120,6 @@ export function createServer(dependencies: PluginDependencies): Plugin {
             await logPluginEvent(input.client as PluginLogger, 'info', 'ccs_sync started', {
               dryRun: args.dryRun ?? false,
               watch: args.watch ?? false,
-              opencodeConfigPath: args.opencodeConfigPath ?? null,
-              ccsConfigPath: args.ccsConfigPath ?? null,
-              providers: args.providers ?? [],
-              includeModelFamilies: args.includeModelFamilies ?? [],
               sessionID: context.sessionID,
               messageID: context.messageID,
               directory: context.directory,
@@ -160,9 +147,6 @@ export function createServer(dependencies: PluginDependencies): Plugin {
                 error: normalizeError(error),
                 dryRun: args.dryRun ?? false,
                 watch: args.watch ?? false,
-                opencodeConfigPath: args.opencodeConfigPath ?? null,
-                ccsConfigPath: args.ccsConfigPath ?? null,
-                providers: args.providers ?? [],
               });
               throw error;
             }

@@ -1,16 +1,15 @@
 # opencode-ccs-sync
 
-`opencode-ccs-sync` is an OpenCode plugin that reads your CCS configuration, inspects the
-live CCS provider settings files in `~/.ccs`, validates the resulting model choices against
-CLIProxy, and writes those managed `ccs-*` providers into your OpenCode config.
+`opencode-ccs-sync` is an OpenCode plugin that reads your [Claude Code Switch](https://github.com/kaitranntt/ccs) (CCS) configuration and automatically keeps your OpenCode config in sync.
 
 It is designed to be safe and repeatable:
 
 - it only manages `ccs-*` providers and their provider-local model lists
 - it preserves unrelated OpenCode config and JSONC comments
 - it chooses one deterministic global default model for OpenCode
-- it supports dry runs and long-running watch mode
-- it returns structured JSON so it is safe to call from OpenCode agents and automation
+- it automatically syncs once on every OpenCode startup
+- it automatically re-syncs when the CCS config changes while OpenCode is running
+- it exposes structured JSON through its internal tool surface for automation and debugging
 
 ## What you need before this can work
 
@@ -19,7 +18,7 @@ You MUST have all of the following working first:
 1. **OpenCode installed and running**
 2. **CCS installed and configured**
 3. **CLIProxy reachable from your machine**
-4. **A CCS config file at `~/.ccs/config.yaml`**, or a plan to pass `ccsConfigPath`
+4. **A CCS config file at `~/.ccs/config.yaml`**
 
 If CCS itself is not healthy, this plugin cannot fix that for you. It only syncs CCS state
 into OpenCode.
@@ -29,8 +28,8 @@ into OpenCode.
 Before you add this plugin, you SHOULD verify:
 
 - `ccs doctor` succeeds or at least clearly reports the current CCS state
-- your CLIProxy base URL is correct
-- your CCS `providers` list contains the providers you expect to sync
+- your live `~/.ccs/*.settings.json` files exist for the providers you actually use
+- those live settings files contain the Anthropic-compatible values you expect
 - OpenCode is already using a config file you can edit
 
 If you are unsure whether CCS is configured correctly, start here:
@@ -43,19 +42,28 @@ That is the fastest way to catch broken CCS setup before debugging this plugin.
 
 ## What the plugin actually does
 
-When you call the `ccs_sync` tool, it does this in order:
+Once OpenCode loads the plugin, it starts a background sync/watch process automatically.
 
-1. Resolves the OpenCode config path
-2. Resolves the CCS config path
-3. Parses and normalizes CCS config values
-4. Inspects live `~/.ccs/*.settings.json` files to determine which providers are actually in use
-5. Extracts the explicit selected/default models for each live provider from Anthropic-compatible env values
-6. Validates those model choices against CLIProxy discovery for each provider
-7. Rewrites only the managed `ccs-*` sections in your OpenCode config
-8. Chooses one global OpenCode `model` value deterministically
-9. Returns a structured JSON result describing what changed
+That startup process does this:
 
-The plugin does **not** prompt interactively. All input comes from JSON tool arguments.
+1. resolves your OpenCode config path
+2. resolves your CCS config path
+3. parses and normalizes CCS config values
+4. inspects live `~/.ccs/*.settings.json` files to determine which providers are actually in use
+5. extracts the explicit selected/default models for each live provider from Anthropic-compatible env values
+6. validates those selected models against CLIProxy discovery
+7. rewrites only the managed `ccs-*` sections in your OpenCode config
+8. chooses one deterministic global default model for OpenCode
+9. keeps watching for CCS/OpenCode config changes and repeats the sync when needed
+
+The normal user flow is therefore:
+
+1. install or link the plugin
+2. restart OpenCode
+3. let the plugin perform its automatic startup sync
+4. edit CCS config as needed and let the plugin re-sync automatically
+
+The plugin does **not** require an interactive setup wizard.
 
 ## Managed scope
 
@@ -76,8 +84,10 @@ OpenCode supports loading plugins either from a package name in config or from l
 
 Official docs:
 
-- OpenCode config: <https://opencode.ai/docs/config/>
+- OpenCode config (global + project locations): <https://opencode.ai/docs/config/#global>
 - OpenCode plugins: <https://opencode.ai/docs/plugins/>
+- CCS repository: <https://github.com/kaitranntt/ccs>
+- CCS docs: <https://docs.ccs.kaitran.ca>
 
 ### Option A: install by package name
 
@@ -111,18 +121,17 @@ OpenCode’s docs describe config files such as:
 - global: `~/.config/opencode/opencode.json`
 - project: `./opencode.json`
 
-### Important implementation detail for this plugin
+This plugin follows OpenCode's normal file conventions automatically.
 
-This plugin currently looks for **`opencode.jsonc` by default**, in this order:
+It resolves your OpenCode config in this order:
 
-1. explicit `opencodeConfigPath`
+1. `./opencode.json`
 2. `./opencode.jsonc`
-3. `~/.config/opencode/opencode.jsonc`
+3. `~/.config/opencode/opencode.json`
+4. `~/.config/opencode/opencode.jsonc`
 
-So if your real OpenCode config is stored as `opencode.json`, you SHOULD pass
-`opencodeConfigPath` explicitly when you call `ccs_sync`.
-
-That avoids guessing and matches the current implementation exactly.
+You SHOULD normally let the plugin discover the correct file by convention instead of pointing it
+at a path manually.
 
 ## Where to put the CCS config
 
@@ -132,44 +141,39 @@ By default, the plugin reads:
 ~/.ccs/config.yaml
 ```
 
-If your CCS config lives elsewhere, pass `ccsConfigPath` explicitly.
-
 CCS reference:
 
 - CCS repository/README: <https://github.com/kaitranntt/ccs>
+- CCS docs: <https://docs.ccs.kaitran.ca>
 
 ## CCS inputs this plugin actually uses
 
 The plugin reads two kinds of CCS inputs:
 
-1. `~/.ccs/config.yaml` for high-level runtime details such as:
+1. `~/.ccs/config.yaml` for broad CCS/CLIProxy context such as:
 
-- `env.CLI_PROXY_BASE_URL`
-- `env.ANTHROPIC_MODEL`
-- `providers`
-- `defaultProvider`
 - `cliproxy.providers`
 - `cliproxy_server.local.port`
 
-2. Live `~/.ccs/*.settings.json` files for the real provider/model selections that SHOULD be
-   exposed in OpenCode.
+2. Live `~/.ccs/*.settings.json` files for the provider-specific values that actually matter for
+   OpenCode registration:
 
-Those settings files are the main source of truth for narrowing what gets registered.
+- `ANTHROPIC_BASE_URL`
+- `ANTHROPIC_MODEL`
+- `ANTHROPIC_DEFAULT_OPUS_MODEL`
+- `ANTHROPIC_DEFAULT_SONNET_MODEL`
+- `ANTHROPIC_DEFAULT_HAIKU_MODEL`
 
-Example:
+The live `*.settings.json` files are the more specific source of truth. This plugin uses them to
+decide:
 
-```yaml
-env:
-  CLI_PROXY_BASE_URL: http://127.0.0.1:3456
-  ANTHROPIC_MODEL: claude-sonnet-4
-providers:
-  - claude
-  - codex
-defaultProvider: claude
-```
+- which providers are actually active
+- which models should be offered for each provider
+- which runtime base URL a given provider really uses
+- which model should be preferred as the default for that provider
 
-If `CLI_PROXY_BASE_URL` is missing, the plugin can derive the runtime URL from
-`cliproxy_server.local.port`. If neither value exists, it defaults to:
+If a provider-specific base URL cannot be derived from live settings, the plugin falls back to the
+local cliproxy port from `config.yaml`. If neither value exists, it defaults to:
 
 ```text
 http://127.0.0.1:3456
@@ -246,57 +250,31 @@ then `ccs-codex.models` SHOULD end up containing only:
 
 not unrelated models such as `gpt-4o`, Gemini models, or Claude models.
 
-## The OpenCode tool this plugin adds
+## Automatic sync lifecycle
 
-The plugin registers exactly one custom tool:
+After OpenCode loads the plugin, the plugin immediately starts its background watch flow.
 
-```text
-ccs_sync
-```
+That means:
 
-It accepts these optional JSON arguments:
+- **on every OpenCode start**, it performs one initial sync
+- **while OpenCode keeps running**, it watches the resolved CCS config path
+- it also watches the resolved OpenCode config path
+- if either file changes, it re-runs sync automatically
+- it suppresses self-triggered write loops using content hashing and a short suppression window
 
-```json
-{
-  "opencodeConfigPath": "/absolute/or/relative/path/to/opencode.jsonc",
-  "ccsConfigPath": "/absolute/or/relative/path/to/config.yaml",
-  "providers": ["claude", "codex"],
-  "includeModelFamilies": ["claude", "gpt"],
-  "dryRun": true,
-  "watch": false
-}
-```
+This automatic lifecycle is the primary user-facing behavior. You SHOULD think of this as a
+background syncing plugin, not a manual command you have to keep invoking.
 
-### Argument behavior
+## Internal tool surface
 
-- `opencodeConfigPath`: override the default OpenCode config lookup
-- `ccsConfigPath`: override the default CCS config lookup
-- `providers`: sync only a specific provider subset
-- `includeModelFamilies`: keep only model IDs matching the given prefixes
-- `dryRun`: compute the result but do not write the OpenCode config
-- `watch`: stay running and resync on config changes
+The plugin still exposes an internal `ccs_sync` tool for automation and deep debugging, but that
+is **not** the normal user workflow.
 
-### Example OpenCode usage
+For normal use, you SHOULD install the plugin, restart OpenCode, and let the plugin handle:
 
-Once the plugin is loaded, the safest first call is a dry run.
-
-Example prompt inside OpenCode:
-
-```text
-Run ccs_sync with {"dryRun": true}
-```
-
-If your OpenCode config is actually stored as `opencode.json`, make the path explicit:
-
-```text
-Run ccs_sync with {"dryRun": true, "opencodeConfigPath": "./opencode.json"}
-```
-
-If the returned JSON looks correct, run the real sync:
-
-```text
-Run ccs_sync with {}
-```
+- startup sync automatically
+- provider/model narrowing automatically
+- automatic re-sync when the CCS config changes
 
 ## How default model selection works
 
@@ -336,13 +314,13 @@ Example generated shape:
       },
       "models": {
         "claude-sonnet-4-6": {
-          "name": "Claude Sonnet 4 6",
+          "name": "Claude Sonnet 4.6",
         },
         "claude-opus-4-6": {
-          "name": "Claude Opus 4 6",
+          "name": "Claude Opus 4.6",
         },
         "claude-haiku-4-5-20251001": {
-          "name": "Claude Haiku 4 5 20251001",
+          "name": "Claude Haiku 4.5 20251001",
         },
       },
     },
@@ -353,26 +331,17 @@ Example generated shape:
 
 Important: there is **no** root-level `models` block. OpenCode expects provider-local `models`.
 
-## JSON result returned by `ccs_sync`
+## Logging and debugging
 
-The tool returns JSON as a string so OpenCode automation can parse it safely.
+If you need to debug the plugin, use OpenCode's normal logs rather than manually driving sync as a
+user workflow.
 
-Example:
+Useful checks:
 
-```json
-{
-  "ok": true,
-  "mode": "sync",
-  "changed": true,
-  "resolvedPaths": {
-    "opencodeConfigPath": "/workspace/opencode.jsonc",
-    "ccsConfigPath": "/home/user/.ccs/config.yaml"
-  },
-  "providers": ["ccs-claude"],
-  "defaultModel": "ccs-claude/claude-sonnet-4",
-  "summary": "Updated 1 CCS provider(s). Default model: ccs-claude/claude-sonnet-4."
-}
-```
+- restart OpenCode and inspect the config after startup
+- inspect OpenCode logs for `opencode-ccs-sync`
+- confirm the generated `provider.ccs-*` entries match the live `~/.ccs/*.settings.json` files
+- edit the CCS config and confirm OpenCode updates automatically while still running
 
 ## Retry behavior
 
@@ -390,33 +359,20 @@ It does **not** retry indefinitely for:
 
 Backoff starts at 1 second and is capped at 30 seconds.
 
-## Watch mode
-
-If you call the tool with `watch: true`, it:
-
-- runs one initial sync
-- watches the resolved CCS config path
-- watches the resolved OpenCode config path
-- re-runs sync when either file changes
-- suppresses self-triggered write loops using content hashing and a short suppression window
-
-Watch mode is useful if you expect CCS config or managed model availability to change while
-OpenCode is already running.
-
 ## Fastest way to test this as a user
 
 If you want the quickest end-to-end validation, follow this order:
 
 1. make sure CCS works
 2. run `ccs doctor`
-3. confirm `~/.ccs/config.yaml` has the providers you expect
+3. confirm `~/.ccs/config.yaml` and the live `~/.ccs/*.settings.json` files contain the providers/models you actually expect
 4. add the plugin to OpenCode
-5. call `ccs_sync` with `dryRun: true`
-6. inspect the returned `resolvedPaths`, `providers`, and `defaultModel`
+5. restart OpenCode
+6. inspect your OpenCode config after startup sync
 7. confirm each generated `provider.ccs-*` contains only the models explicitly selected in the matching live `~/.ccs/*.settings.json` file
-8. call it again without `dryRun` to write the config
+8. edit the CCS config and confirm the plugin re-syncs automatically while OpenCode is still running
 
-That gives you one safe preview run before touching your OpenCode config.
+That is the real user path now: install, restart, verify auto-sync, then verify automatic re-sync on CCS changes.
 
 ## Local testing for this repository
 
@@ -476,17 +432,15 @@ mkdir -p ~/.config/opencode/plugins
 ln -sf "$(pwd)/dist/index.js" ~/.config/opencode/plugins/opencode-ccs-sync.js
 ```
 
-After restarting OpenCode, test with:
+After restarting OpenCode, the plugin SHOULD perform its initial sync automatically.
 
-```text
-Run ccs_sync with {"dryRun": true}
-```
+For local validation, check these instead of manually invoking the internal tool:
 
-If your config is stored as `opencode.json`, use:
-
-```text
-Run ccs_sync with {"dryRun": true, "opencodeConfigPath": "./opencode.json"}
-```
+1. OpenCode starts without plugin load errors
+2. your OpenCode config is updated on startup
+3. only `ccs-*` sections are changed
+4. provider-local model lists match the live `~/.ccs/*.settings.json` selections
+5. editing the CCS config triggers another automatic sync while OpenCode is still open
 
 ## Troubleshooting tips
 
@@ -495,14 +449,11 @@ If sync does not behave as expected, check these in order:
 1. `ccs doctor`
 2. verify `~/.ccs/config.yaml` exists and CLIProxy is pointed at the expected local server
 3. verify the live `~/.ccs/*.settings.json` files contain the providers and Anthropic model envs you actually expect OpenCode to expose
-4. verify CLIProxy is reachable at `CLI_PROXY_BASE_URL` or the derived local cliproxy port
-5. run `ccs_sync` with `dryRun: true`
-6. inspect `resolvedPaths` in the JSON result
-7. if your OpenCode config is actually `opencode.json`, pass `opencodeConfigPath` explicitly
+4. verify CLIProxy is reachable at the provider-specific `ANTHROPIC_BASE_URL` values from the live settings files, or at the derived local cliproxy port if those are absent
+5. restart OpenCode and inspect the OpenCode log output / config result after startup
 
 Common causes of confusion:
 
-- using `opencode.json` while this plugin is defaulting to `opencode.jsonc`
 - CCS is installed but not healthy yet
 - providers appear in `cliproxy.providers` but do not have live Anthropic-compatible `*.settings.json` files
 - CLIProxy is reachable but a discovered model is not explicitly selected in the live provider settings, so it is intentionally omitted
@@ -523,6 +474,8 @@ Unit tests currently cover:
 - dry-run behavior and idempotency
 - plugin tool registration and JSON output
 - watch-mode write-loop suppression
+- startup auto-sync on plugin load
+- automatic re-sync when the CCS config changes
 
 ## License
 

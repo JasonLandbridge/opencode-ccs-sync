@@ -8,12 +8,15 @@ export interface NormalizedCcsConfig {
   runtimeBaseUrl: string;
   bearerToken: string;
   selectedProviders: string[];
-  defaultProvider?: string;
-  anthropicModel?: string;
+}
+
+export interface ProviderSettingsMetadata {
+  providerBaseUrl: string;
+  selectedModels: string[];
+  preferredModel: string | undefined;
 }
 
 interface RawEnvConfig {
-  CLI_PROXY_BASE_URL?: unknown;
   ANTHROPIC_MODEL?: unknown;
 }
 
@@ -43,8 +46,6 @@ interface RawProviderSettings {
 
 interface RawCcsConfig {
   env?: RawEnvConfig;
-  providers?: unknown;
-  defaultProvider?: unknown;
   cliproxy?: RawCliProxyConfig;
   cliproxy_server?: RawCliProxyServerConfig;
 }
@@ -163,6 +164,54 @@ export function inferProviderSelectionsFromSettingsFiles(
   );
 }
 
+export function inferProviderMetadataFromSettingsFiles(
+  settingsFiles: Record<string, string>
+): Record<string, ProviderSettingsMetadata> {
+  const entries: Array<[string, ProviderSettingsMetadata]> = [];
+
+  for (const [fileName, content] of Object.entries(settingsFiles)) {
+    const providerName = providerNameFromSettingsFile(fileName);
+    if (!providerName) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(content) as RawProviderSettings;
+      const env = parsed?.env;
+      const anthropicBaseUrl = asTrimmedString(env?.ANTHROPIC_BASE_URL);
+      if (!anthropicBaseUrl) {
+        continue;
+      }
+
+      const selectedModels = [
+        asTrimmedString(env?.ANTHROPIC_MODEL),
+        asTrimmedString(env?.ANTHROPIC_DEFAULT_OPUS_MODEL),
+        asTrimmedString(env?.ANTHROPIC_DEFAULT_SONNET_MODEL),
+        asTrimmedString(env?.ANTHROPIC_DEFAULT_HAIKU_MODEL),
+      ].filter((model): model is string => model !== undefined);
+
+      entries.push([
+        providerName,
+        {
+          providerBaseUrl: anthropicBaseUrl,
+          selectedModels: Array.from(new Set(selectedModels)).sort((left, right) =>
+            left.localeCompare(right)
+          ),
+          preferredModel: asTrimmedString(env?.ANTHROPIC_MODEL),
+        },
+      ]);
+    } catch {
+      continue;
+    }
+  }
+
+  const metadata = Object.fromEntries(entries) as Record<string, ProviderSettingsMetadata>;
+
+  return Object.fromEntries(
+    Object.entries(metadata).sort(([left], [right]) => left.localeCompare(right))
+  );
+}
+
 export function parseCcsConfig(input: string): unknown {
   const document = parseDocument(input);
   if (document.errors.length > 0) {
@@ -175,30 +224,19 @@ export function parseCcsConfig(input: string): unknown {
 export function normalizeCcsConfig(input: unknown): NormalizedCcsConfig {
   const rawConfig: RawCcsConfig =
     typeof input === 'object' && input !== null ? (input as RawCcsConfig) : {};
-  const env: RawEnvConfig = rawConfig.env ?? {};
   const cliproxy: RawCliProxyConfig = rawConfig.cliproxy ?? {};
   const cliproxyServer: RawCliProxyServerConfig = rawConfig.cliproxy_server ?? {};
 
-  const selectedProviders: string[] =
-    normalizeProviders(rawConfig.providers).length > 0
-      ? normalizeProviders(rawConfig.providers)
-      : normalizeProviders(cliproxy.providers);
-  const defaultProvider: string | undefined = asTrimmedString(rawConfig.defaultProvider);
-  const anthropicModel: string | undefined = asTrimmedString(env.ANTHROPIC_MODEL);
+  const selectedProviders: string[] = normalizeProviders(cliproxy.providers);
   const derivedLocalRuntimeBaseUrl: string | undefined = (() => {
     const localPort = asPortNumber(cliproxyServer.local?.port);
     return localPort ? `http://127.0.0.1:${localPort}` : undefined;
   })();
-  const runtimeBaseUrl: string =
-    asTrimmedString(env.CLI_PROXY_BASE_URL) ??
-    derivedLocalRuntimeBaseUrl ??
-    DEFAULT_RUNTIME_BASE_URL;
+  const runtimeBaseUrl: string = derivedLocalRuntimeBaseUrl ?? DEFAULT_RUNTIME_BASE_URL;
 
   return {
     runtimeBaseUrl,
     bearerToken: DEFAULT_BEARER_TOKEN,
     selectedProviders,
-    defaultProvider,
-    anthropicModel,
   };
 }

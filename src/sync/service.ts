@@ -1,6 +1,7 @@
 import type { ProviderConfig } from '@opencode-ai/sdk';
 import { dirname, join } from 'node:path';
 import {
+  inferProviderMetadataFromSettingsFiles,
   inferProviderSelectionsFromSettingsFiles,
   inferProvidersFromSettingsFiles,
   normalizeCcsConfig,
@@ -29,6 +30,7 @@ export interface RunSyncOptions {
   ccsConfigPath?: string;
   providers?: string[];
   includeModelFamilies?: string[];
+  pathExists?: (filePath: string) => boolean;
   readFile: (filePath: string) => Promise<string>;
   readDir?: (directoryPath: string) => Promise<string[]>;
   writeFile: (filePath: string, content: string) => Promise<void> | void;
@@ -73,7 +75,7 @@ function normalizeRequestedProviders(providers: string[] | undefined): string[] 
 function pickDefaultModel(input: {
   providers: string[];
   modelsByProvider: Record<string, string[]>;
-  anthropicModel?: string;
+  preferredModelsByProvider?: Record<string, string | undefined>;
 }): string | undefined {
   const defaultProvider: string | undefined = [...input.providers].sort((left, right) =>
     left.localeCompare(right)
@@ -88,9 +90,11 @@ function pickDefaultModel(input: {
     return undefined;
   }
 
+  const preferredModelForDefaultProvider = input.preferredModelsByProvider?.[defaultProvider];
+
   const selectedModelId: string =
-    input.anthropicModel && discoveredModels.includes(input.anthropicModel)
-      ? input.anthropicModel
+    preferredModelForDefaultProvider && discoveredModels.includes(preferredModelForDefaultProvider)
+      ? preferredModelForDefaultProvider
       : discoveredModels[0];
 
   return `${toManagedProviderName(defaultProvider)}/${selectedModelId}`;
@@ -197,9 +201,19 @@ async function discoverConfiguredProviders(options: {
   ccsConfigPath: string;
   readDir?: (directoryPath: string) => Promise<string[]>;
   readFile: (filePath: string) => Promise<string>;
-}): Promise<{ providers: string[]; selectedModelsByProvider: Record<string, string[]> }> {
+}): Promise<{
+  providers: string[];
+  selectedModelsByProvider: Record<string, string[]>;
+  providerBaseUrls: Record<string, string>;
+  preferredModelsByProvider: Record<string, string | undefined>;
+}> {
   if (!options.readDir) {
-    return { providers: [], selectedModelsByProvider: {} };
+    return {
+      providers: [],
+      selectedModelsByProvider: {},
+      providerBaseUrls: {},
+      preferredModelsByProvider: {},
+    };
   }
 
   const configDirectoryPath = dirname(options.ccsConfigPath);
@@ -215,10 +229,30 @@ async function discoverConfiguredProviders(options: {
     )
   ) as Record<string, string>;
 
+  const providerMetadata = inferProviderMetadataFromSettingsFiles(settingsFiles);
+
   return {
     providers: inferProvidersFromSettingsFiles(settingsFiles),
     selectedModelsByProvider: inferProviderSelectionsFromSettingsFiles(settingsFiles),
+    providerBaseUrls: Object.fromEntries(
+      Object.entries(providerMetadata).map(([provider, metadata]) => [
+        provider,
+        metadata.providerBaseUrl,
+      ])
+    ),
+    preferredModelsByProvider: Object.fromEntries(
+      Object.entries(providerMetadata).map(([provider, metadata]) => [
+        provider,
+        metadata.preferredModel,
+      ])
+    ),
   };
+}
+
+function runtimeBaseUrlFromProviderBaseUrl(providerBaseUrl: string): string {
+  const normalizedBaseUrl = providerBaseUrl.replace(/\/$/, '');
+  const providerPathMatch = normalizedBaseUrl.match(/^(.*)\/api\/provider\/[^/]+$/);
+  return providerPathMatch ? providerPathMatch[1] : normalizedBaseUrl;
 }
 
 export async function runSync(options: RunSyncOptions): Promise<SyncResult> {
@@ -226,6 +260,7 @@ export async function runSync(options: RunSyncOptions): Promise<SyncResult> {
     explicitPath: options.opencodeConfigPath,
     cwd: options.cwd,
     homeDir: options.homeDir,
+    exists: options.pathExists,
   });
   const ccsConfigPath: string = resolveCcsConfigPath({
     explicitPath: options.ccsConfigPath,
@@ -255,9 +290,13 @@ export async function runSync(options: RunSyncOptions): Promise<SyncResult> {
 
   const modelsByProvider: Record<string, string[]> = {};
   for (const provider of selectedProviders) {
+    const runtimeBaseUrl = configuredSelections.providerBaseUrls[provider]
+      ? runtimeBaseUrlFromProviderBaseUrl(configuredSelections.providerBaseUrls[provider])
+      : normalizedCcsConfig.runtimeBaseUrl;
+
     const discoveredModels: string[] = await options.fetchModels({
       provider,
-      runtimeBaseUrl: normalizedCcsConfig.runtimeBaseUrl,
+      runtimeBaseUrl,
       bearerToken: normalizedCcsConfig.bearerToken,
       includeModelFamilies: options.includeModelFamilies,
       abortSignal: options.abortSignal,
@@ -277,7 +316,7 @@ export async function runSync(options: RunSyncOptions): Promise<SyncResult> {
   const defaultModel: string | undefined = pickDefaultModel({
     providers: selectedProviders,
     modelsByProvider,
-    anthropicModel: normalizedCcsConfig.anthropicModel,
+    preferredModelsByProvider: configuredSelections.preferredModelsByProvider,
   });
 
   const managedProviders: Record<string, ProviderConfig> = Object.fromEntries(
@@ -285,7 +324,9 @@ export async function runSync(options: RunSyncOptions): Promise<SyncResult> {
       toManagedProviderName(provider),
       buildProviderConfig(
         provider,
-        normalizedCcsConfig.runtimeBaseUrl,
+        configuredSelections.providerBaseUrls[provider]
+          ? runtimeBaseUrlFromProviderBaseUrl(configuredSelections.providerBaseUrls[provider])
+          : normalizedCcsConfig.runtimeBaseUrl,
         normalizedCcsConfig.bearerToken,
         modelsByProvider[provider] ?? []
       ),

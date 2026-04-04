@@ -38,7 +38,7 @@ describe('opencode-ccs-sync plugin', () => {
         mode: 'watch',
         changed: false,
         resolvedPaths: {
-          opencodeConfigPath: '/workspace/opencode.jsonc',
+          opencodeConfigPath: '/workspace/opencode.json',
           ccsConfigPath: '/workspace/config.yaml',
         },
         providers: ['ccs-claude'],
@@ -53,7 +53,7 @@ describe('opencode-ccs-sync plugin', () => {
           mode: 'sync',
           changed: false,
           resolvedPaths: {
-            opencodeConfigPath: '/workspace/opencode.jsonc',
+            opencodeConfigPath: '/workspace/opencode.json',
             ccsConfigPath: '/workspace/config.yaml',
           },
           providers: ['ccs-claude'],
@@ -66,6 +66,7 @@ describe('opencode-ccs-sync plugin', () => {
       readDir: vi.fn(async () => []),
       writeFile: vi.fn(),
       discoverProviderModels: vi.fn(),
+      pathExists: vi.fn(() => false),
       homeDir: '/home/test',
     });
 
@@ -90,7 +91,7 @@ describe('opencode-ccs-sync plugin', () => {
           mode: 'sync',
           changed: true,
           resolvedPaths: {
-            opencodeConfigPath: '/workspace/opencode.jsonc',
+            opencodeConfigPath: '/workspace/opencode.json',
             ccsConfigPath: '/workspace/config.yaml',
           },
           providers: ['ccs-claude'],
@@ -104,7 +105,7 @@ describe('opencode-ccs-sync plugin', () => {
           mode: 'watch',
           changed: false,
           resolvedPaths: {
-            opencodeConfigPath: '/workspace/opencode.jsonc',
+            opencodeConfigPath: '/workspace/opencode.json',
             ccsConfigPath: '/workspace/config.yaml',
           },
           providers: ['ccs-claude'],
@@ -116,6 +117,7 @@ describe('opencode-ccs-sync plugin', () => {
       readDir: vi.fn(async () => []),
       writeFile: vi.fn(),
       discoverProviderModels: vi.fn(),
+      pathExists: vi.fn(() => false),
       homeDir: '/home/test',
     });
 
@@ -125,11 +127,7 @@ describe('opencode-ccs-sync plugin', () => {
     expect(execute).toBeDefined();
 
     const output = await execute!(
-      {
-        dryRun: true,
-        opencodeConfigPath: '/workspace/opencode.jsonc',
-        ccsConfigPath: '/workspace/config.yaml',
-      },
+      { dryRun: true },
       {
         sessionID: 'session-1',
         messageID: 'message-1',
@@ -152,7 +150,7 @@ describe('opencode-ccs-sync plugin', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.mode).toBe('sync');
     expect(parsed.providers).toEqual(['ccs-claude']);
-    expect(parsed.resolvedPaths.opencodeConfigPath).toBe('/workspace/opencode.jsonc');
+    expect(parsed.resolvedPaths.opencodeConfigPath).toBe('/workspace/opencode.json');
     expect(log).toHaveBeenCalledTimes(2);
   });
 
@@ -163,7 +161,7 @@ describe('opencode-ccs-sync plugin', () => {
         mode: 'watch',
         changed: false,
         resolvedPaths: {
-          opencodeConfigPath: '/workspace/opencode.jsonc',
+          opencodeConfigPath: '/workspace/opencode.json',
           ccsConfigPath: '/workspace/config.yaml',
         },
         providers: ['ccs-claude'],
@@ -178,6 +176,7 @@ describe('opencode-ccs-sync plugin', () => {
       readDir: vi.fn(async () => []),
       writeFile: vi.fn(),
       discoverProviderModels: vi.fn(),
+      pathExists: vi.fn(() => false),
       homeDir: '/home/test',
     });
     const hooks = await customServer(createPluginInput());
@@ -212,7 +211,7 @@ describe('opencode-ccs-sync plugin', () => {
           mode: 'watch',
           changed: false,
           resolvedPaths: {
-            opencodeConfigPath: '/workspace/opencode.jsonc',
+            opencodeConfigPath: '/workspace/opencode.json',
             ccsConfigPath: '/workspace/config.yaml',
           },
           providers: ['ccs-claude'],
@@ -224,6 +223,7 @@ describe('opencode-ccs-sync plugin', () => {
       readDir: vi.fn(async () => []),
       writeFile: vi.fn(),
       discoverProviderModels: vi.fn(),
+      pathExists: vi.fn(() => false),
       homeDir: '/home/test',
     });
     const hooks = await customServer(createPluginInput(log));

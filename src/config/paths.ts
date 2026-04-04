@@ -7,6 +7,8 @@ export interface ResolvePathOptions {
   exists?: (candidate: string) => boolean;
 }
 
+const OPEN_CODE_CONFIG_FILE_NAMES = ['opencode.json', 'opencode.jsonc'] as const;
+
 function normalizeInputPath(inputPath: string): string {
   return inputPath.replace(/\\/g, '/');
 }
@@ -40,12 +42,21 @@ export function resolveOpenCodeConfigPath(options: ResolvePathOptions): string {
     return resolveCandidatePath(options.explicitPath, options.homeDir);
   }
 
-  const projectConfigPath: string = path.join(options.cwd, 'opencode.jsonc');
-  if (exists(projectConfigPath)) {
-    return projectConfigPath;
+  for (const fileName of OPEN_CODE_CONFIG_FILE_NAMES) {
+    const projectConfigPath = path.join(options.cwd, fileName);
+    if (exists(projectConfigPath)) {
+      return projectConfigPath;
+    }
   }
 
-  return path.join(options.homeDir, '.config', 'opencode', 'opencode.jsonc');
+  for (const fileName of OPEN_CODE_CONFIG_FILE_NAMES) {
+    const globalConfigPath = path.join(options.homeDir, '.config', 'opencode', fileName);
+    if (exists(globalConfigPath)) {
+      return globalConfigPath;
+    }
+  }
+
+  return path.join(options.homeDir, '.config', 'opencode', 'opencode.json');
 }
 
 export function resolveCcsConfigPath(options: ResolvePathOptions): string {

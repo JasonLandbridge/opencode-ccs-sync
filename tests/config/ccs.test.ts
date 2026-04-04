@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  inferProviderMetadataFromSettingsFiles,
   inferProviderSelectionsFromSettingsFiles,
   inferProvidersFromSettingsFiles,
   normalizeCcsConfig,
@@ -7,40 +8,42 @@ import {
 } from '../../src/config/ccs.ts';
 
 describe('CCS config normalization', () => {
-  it('normalizes runtime URL, providers, and ANTHROPIC_MODEL', () => {
+  it('derives runtime/providers from conventional cliproxy fields instead of broad YAML env overrides', () => {
     const parsed = parseCcsConfig(`
 env:
   CLI_PROXY_BASE_URL: http://localhost:3456
   ANTHROPIC_MODEL: claude-sonnet-4
-providers:
-  - claude
-  - codex
+cliproxy:
+  providers:
+    - claude
+    - codex
+cliproxy_server:
+  local:
+    port: 8317
 `);
 
     expect(normalizeCcsConfig(parsed)).toMatchObject({
-      runtimeBaseUrl: 'http://localhost:3456',
+      runtimeBaseUrl: 'http://127.0.0.1:8317',
       selectedProviders: ['claude', 'codex'],
-      anthropicModel: 'claude-sonnet-4',
       bearerToken: 'ccs-internal-managed',
     });
   });
 
   it('deduplicates and sorts providers lexicographically', () => {
     const parsed = parseCcsConfig(`
-env:
-  CLI_PROXY_BASE_URL: http://localhost:3456
-providers:
-  - codex
-  - claude
-  - codex
-  - "  claude  "
+cliproxy:
+  providers:
+    - codex
+    - claude
+    - codex
+    - "  claude  "
 `);
 
     expect(normalizeCcsConfig(parsed).selectedProviders).toEqual(['claude', 'codex']);
   });
 
   it('falls back to localhost runtime defaults when env is absent', () => {
-    const parsed = parseCcsConfig('providers:\n  - claude\n');
+    const parsed = parseCcsConfig('cliproxy:\n  providers:\n    - claude\n');
 
     expect(normalizeCcsConfig(parsed)).toMatchObject({
       runtimeBaseUrl: 'http://127.0.0.1:3456',
@@ -68,7 +71,7 @@ cliproxy_server:
     });
   });
 
-  it('prefers env.CLI_PROXY_BASE_URL over the derived local cliproxy port', () => {
+  it('uses the derived local cliproxy port instead of broad YAML env overrides', () => {
     const parsed = parseCcsConfig(`
 env:
   CLI_PROXY_BASE_URL: http://127.0.0.1:9999
@@ -81,7 +84,7 @@ cliproxy_server:
 `);
 
     expect(normalizeCcsConfig(parsed)).toMatchObject({
-      runtimeBaseUrl: 'http://127.0.0.1:9999',
+      runtimeBaseUrl: 'http://127.0.0.1:8317',
       selectedProviders: ['codex'],
     });
   });
@@ -139,6 +142,37 @@ cliproxy_server:
     ).toEqual({
       claude: ['claude-haiku-4-5-20251001', 'claude-opus-4-6', 'claude-sonnet-4-6'],
       codex: ['gpt-5-codex-mini', 'gpt-5.3-codex'],
+    });
+  });
+
+  it('derives provider base URLs and selected models from live settings files', () => {
+    expect(
+      inferProviderMetadataFromSettingsFiles({
+        'codex.settings.json': JSON.stringify({
+          env: {
+            ANTHROPIC_BASE_URL: 'http://127.0.0.1:8317/api/provider/codex',
+            ANTHROPIC_MODEL: 'gpt-5.3-codex',
+            ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gpt-5-codex-mini',
+          },
+        }),
+        'claude.settings.json': JSON.stringify({
+          env: {
+            ANTHROPIC_BASE_URL: 'http://127.0.0.1:8317/api/provider/claude',
+            ANTHROPIC_MODEL: 'claude-sonnet-4-6',
+          },
+        }),
+      })
+    ).toEqual({
+      claude: {
+        providerBaseUrl: 'http://127.0.0.1:8317/api/provider/claude',
+        preferredModel: 'claude-sonnet-4-6',
+        selectedModels: ['claude-sonnet-4-6'],
+      },
+      codex: {
+        providerBaseUrl: 'http://127.0.0.1:8317/api/provider/codex',
+        preferredModel: 'gpt-5.3-codex',
+        selectedModels: ['gpt-5-codex-mini', 'gpt-5.3-codex'],
+      },
     });
   });
 });
