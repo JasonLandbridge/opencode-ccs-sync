@@ -1,5 +1,6 @@
 import { watch } from 'chokidar';
 import { createHash } from 'node:crypto';
+import { dirname, normalize } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import type { RunSyncOptions, SyncResult } from '../sync/service.js';
 import { runSync } from '../sync/service.js';
@@ -51,6 +52,49 @@ async function safeReadHash(filePath: string): Promise<string | undefined> {
   }
 }
 
+function normalizePath(filePath: string): string {
+  return normalize(filePath);
+}
+
+export function resolveWatchPaths(resolvedPaths: {
+  ccsConfigPath: string;
+  opencodeConfigPath: string;
+}): string[] {
+  const ccsConfigPath = normalizePath(resolvedPaths.ccsConfigPath);
+  const opencodeConfigPath = normalizePath(resolvedPaths.opencodeConfigPath);
+  const ccsDirectoryPath = dirname(ccsConfigPath);
+
+  return [ccsConfigPath, opencodeConfigPath, ccsDirectoryPath];
+}
+
+export function shouldTriggerWatchSync(
+  changedPath: string,
+  resolvedPaths: {
+    ccsConfigPath: string;
+    opencodeConfigPath: string;
+  }
+): boolean {
+  const normalizedChangedPath = normalizePath(changedPath);
+  const ccsConfigPath = normalizePath(resolvedPaths.ccsConfigPath);
+  const opencodeConfigPath = normalizePath(resolvedPaths.opencodeConfigPath);
+  const ccsDirectoryPath = dirname(ccsConfigPath);
+
+  if (normalizedChangedPath === ccsConfigPath || normalizedChangedPath === opencodeConfigPath) {
+    return true;
+  }
+
+  if (!normalizedChangedPath.startsWith(`${ccsDirectoryPath}/`)) {
+    return false;
+  }
+
+  const fileName = normalizedChangedPath.slice(ccsDirectoryPath.length + 1);
+  if (fileName.includes('/')) {
+    return false;
+  }
+
+  return fileName.endsWith('.settings.json');
+}
+
 export async function runWatchMode(options: RunWatchModeOptions): Promise<SyncResult> {
   const guard = createWriteLoopGuard({ suppressionWindowMs: 1500 });
   let lastResult: SyncResult = await runSync({ ...options, watch: true });
@@ -62,12 +106,9 @@ export async function runWatchMode(options: RunWatchModeOptions): Promise<SyncRe
     }
   }
 
-  const watcher = watch(
-    [lastResult.resolvedPaths.ccsConfigPath, lastResult.resolvedPaths.opencodeConfigPath],
-    {
-      ignoreInitial: true,
-    }
-  );
+  const watcher = watch(resolveWatchPaths(lastResult.resolvedPaths), {
+    ignoreInitial: true,
+  });
 
   let running: Promise<void> | undefined;
   const triggerSync = async (changedPath: string): Promise<void> => {
@@ -76,6 +117,10 @@ export async function runWatchMode(options: RunWatchModeOptions): Promise<SyncRe
     }
 
     running = (async () => {
+      if (!shouldTriggerWatchSync(changedPath, lastResult.resolvedPaths)) {
+        return;
+      }
+
       if (changedPath === lastResult.resolvedPaths.opencodeConfigPath) {
         const currentHash = await safeReadHash(changedPath);
         if (currentHash && guard.shouldSuppress(currentHash)) {
