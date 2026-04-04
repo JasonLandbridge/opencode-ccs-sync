@@ -4,8 +4,8 @@ This project uses Release Please and npm Trusted Publishing for automated releas
 
 It follows two release channels:
 
-- **Pre-release**: Normal PRs merged to main create `x.x.x-next.J` versions published to the `next` dist-tag for testing and feedback.
-- **Stable Releases**: Release PRs merged to main create computed versions and publish to the `latest` dist-tag.
+- **Pre-release**: Normal PRs merged to master create `x.x.x-next.J` versions published to the `next` dist-tag for testing and feedback.
+- **Stable Releases**: Release PRs merged to master create computed versions and publish to the `latest` dist-tag.
 
 You can also trigger manual releases in the follow ways:
 
@@ -61,7 +61,7 @@ While version is `0.x.x`, breaking changes bump **minor** version.
 
 ### Release Process
 
-1. Push commits to `main` branch
+1. Push commits to `master` branch
 2. Release Please will:
    - Analyze commits
    - Determine version bump

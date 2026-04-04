@@ -32,8 +32,14 @@ jobs:
           cache: true
           experimental: true
 
+      - name: Install dependencies
+        run: bun ci
+
       - name: Build
-        run: mise run build
+        run: bun run build && bun run build:types
+
+      - name: Verify package before publish
+        run: bun run test && bun run lint && bun run typecheck
 
       - id: inputs
         uses: simenandre/setup-inputs@v1
@@ -46,4 +52,4 @@ jobs:
           fi
 
           echo "Publishing with tag: $TAG"
-          mise run publish --tag "$TAG"
+          bun publish --tag "$TAG"
