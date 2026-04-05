@@ -166,17 +166,15 @@ function buildProviderModels(modelIds: string[]): ProviderModelsConfig {
 
 function buildProviderConfig(
   provider: string,
-  runtimeBaseUrl: string,
+  providerBaseUrl: string,
   bearerToken: string,
   modelIds: string[]
 ): ProviderConfig {
-  const normalizedBaseUrl: string = runtimeBaseUrl.replace(/\/$/, '');
-
   return {
     npm: '@ai-sdk/openai-compatible',
     name: `CCS ${toProviderDisplayName(provider)}`,
     options: {
-      baseURL: `${normalizedBaseUrl}/api/provider/${provider}/v1`,
+      baseURL: providerBaseUrl.replace(/\/$/, ''),
       apiKey: bearerToken,
     },
     models: buildProviderModels(modelIds),
@@ -324,9 +322,8 @@ export async function runSync(options: RunSyncOptions): Promise<SyncResult> {
       toManagedProviderName(provider),
       buildProviderConfig(
         provider,
-        configuredSelections.providerBaseUrls[provider]
-          ? runtimeBaseUrlFromProviderBaseUrl(configuredSelections.providerBaseUrls[provider])
-          : normalizedCcsConfig.runtimeBaseUrl,
+        configuredSelections.providerBaseUrls[provider] ??
+          `${normalizedCcsConfig.runtimeBaseUrl}/api/provider/${provider}`,
         normalizedCcsConfig.bearerToken,
         modelsByProvider[provider] ?? []
       ),

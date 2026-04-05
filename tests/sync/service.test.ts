@@ -113,7 +113,7 @@ describe('runSync', () => {
       '      "npm": "@ai-sdk/openai-compatible",',
       '      "name": "CCS Claude",',
       '      "options": {',
-      '        "baseURL": "http://127.0.0.1:3456/api/provider/claude/v1",',
+      '        "baseURL": "http://127.0.0.1:3456/api/provider/claude",',
       '        "apiKey": "ccs-internal-managed"',
       '      },',
       '      "models": {',
@@ -478,5 +478,109 @@ describe('runSync', () => {
     expect(writes).toHaveLength(1);
     expect(writes[0]).toContain('"name": "CCS AGY"');
     expect(writes[0]).toContain('"name": "CCS iFlow"');
+  });
+
+  it('uses ANTHROPIC_BASE_URL from the settings file verbatim as the provider baseURL', async () => {
+    // The settings file has a non-standard path that formula-construction would never produce.
+    // This proves the URL is read directly from the settings file, not derived from runtimeBaseUrl.
+    const writes: string[] = [];
+
+    await runSync({
+      dryRun: false,
+      cwd: '/workspace',
+      homeDir: '/home/test',
+      readFile: async (filePath: string) => {
+        if (filePath.endsWith('config.yaml')) {
+          return [
+            'cliproxy:',
+            '  providers:',
+            '    - claude',
+            '    - codex',
+            '    - ghcp',
+            'cliproxy_server:',
+            '  local:',
+            '    port: 8317',
+          ].join('\n');
+        }
+
+        if (filePath.endsWith('claude.settings.json')) {
+          return JSON.stringify({
+            env: {
+              // Non-standard port — formula using runtimeBaseUrl would produce port 8317
+              ANTHROPIC_BASE_URL: 'http://127.0.0.1:9001/api/provider/claude',
+              ANTHROPIC_MODEL: 'claude-sonnet-4-6',
+            },
+          });
+        }
+
+        if (filePath.endsWith('codex.settings.json')) {
+          return JSON.stringify({
+            env: {
+              ANTHROPIC_BASE_URL: 'http://127.0.0.1:9002/api/provider/codex',
+              ANTHROPIC_MODEL: 'gpt-5.3-codex',
+            },
+          });
+        }
+
+        if (filePath.endsWith('ghcp.settings.json')) {
+          return JSON.stringify({
+            env: {
+              ANTHROPIC_BASE_URL: 'http://127.0.0.1:9003/api/provider/ghcp',
+              ANTHROPIC_MODEL: 'claude-sonnet-4.5',
+            },
+          });
+        }
+
+        return '{"provider":{},"model":""}';
+      },
+      readDir: async () => ['claude.settings.json', 'codex.settings.json', 'ghcp.settings.json'],
+      writeFile: async (_filePath: string, content: string) => {
+        writes.push(content);
+      },
+      fetchModels: async ({ provider }: { provider: string }) =>
+        provider === 'codex'
+          ? ['gpt-5.3-codex']
+          : provider === 'ghcp'
+            ? ['claude-sonnet-4.5']
+            : ['claude-sonnet-4-6'],
+    });
+
+    expect(writes).toHaveLength(1);
+    const config = writes[0];
+
+    // Must use the exact URL from each provider's settings file
+    expect(config).toContain('"baseURL": "http://127.0.0.1:9001/api/provider/claude"');
+    expect(config).toContain('"baseURL": "http://127.0.0.1:9002/api/provider/codex"');
+    expect(config).toContain('"baseURL": "http://127.0.0.1:9003/api/provider/ghcp"');
+    // Must NOT contain the runtime port (8317) — that would mean formula-construction was used
+    expect(config).not.toContain(':8317');
+    expect(config).not.toContain('/v1');
+  });
+
+  it('falls back to constructing the provider baseURL from runtimeBaseUrl when no settings file exists', async () => {
+    const writes: string[] = [];
+
+    await runSync({
+      dryRun: false,
+      cwd: '/workspace',
+      homeDir: '/home/test',
+      readFile: async (filePath: string) => {
+        if (filePath.endsWith('config.yaml')) {
+          return 'cliproxy:\n  providers:\n    - claude\ncliproxy_server:\n  local:\n    port: 8317\n';
+        }
+
+        return '{"provider":{},"model":""}';
+      },
+      // No readDir — settings files not available
+      writeFile: async (_filePath: string, content: string) => {
+        writes.push(content);
+      },
+      fetchModels: async () => ['claude-sonnet-4-6'],
+    });
+
+    expect(writes).toHaveLength(1);
+    // Without a settings file, falls back to runtimeBaseUrl + /api/provider/{name}
+    expect(writes[0]).toContain('"baseURL": "http://127.0.0.1:8317/api/provider/claude"');
+    expect(writes[0]).not.toContain('/v1');
   });
 });
