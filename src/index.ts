@@ -3,8 +3,12 @@ import { tool } from '@opencode-ai/plugin';
 import { existsSync } from 'node:fs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { discoverProviderModels } from './cliproxy/client.js';
+import type { ProbeProtocol } from './sync/protocol.js';
+import { createCachedProtocolDetector } from './sync/protocol.js';
 import { runSync } from './sync/service.js';
 import { runWatchMode } from './watch/watch.js';
+
+const PLUGIN_VERSION = '0.0.1';
 
 interface PluginDependencies {
   runSync: typeof runSync;
@@ -13,6 +17,7 @@ interface PluginDependencies {
   readDir: typeof readdir;
   writeFile: typeof writeFile;
   discoverProviderModels: typeof discoverProviderModels;
+  detectProtocol: (input: { providerBaseUrl: string }) => Promise<ProbeProtocol>;
   pathExists: (filePath: string) => boolean;
   homeDir: string;
 }
@@ -51,6 +56,7 @@ function normalizeError(error: unknown): string {
 }
 
 function createDefaultDependencies(): PluginDependencies {
+  const cachedDetector = createCachedProtocolDetector();
   return {
     runSync,
     runWatchMode,
@@ -58,6 +64,8 @@ function createDefaultDependencies(): PluginDependencies {
     readDir: readdir,
     writeFile,
     discoverProviderModels,
+    detectProtocol: ({ providerBaseUrl }) =>
+      cachedDetector({ providerBaseUrl, pluginVersion: PLUGIN_VERSION }),
     pathExists: existsSync,
     homeDir: process.env.HOME ?? process.env.USERPROFILE ?? '',
   };
@@ -84,6 +92,7 @@ function createSharedOptions(
     writeFile: (filePath: string, content: string) =>
       dependencies.writeFile(filePath, content, 'utf8'),
     fetchModels: dependencies.discoverProviderModels,
+    detectProtocol: dependencies.detectProtocol,
   };
 }
 

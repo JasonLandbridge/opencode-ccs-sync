@@ -1,5 +1,6 @@
 import type { ProviderConfig } from '@opencode-ai/sdk';
 import { dirname, join } from 'node:path';
+import type { ProbeProtocol } from './protocol.js';
 import {
   inferProviderMetadataFromSettingsFiles,
   inferProviderSelectionsFromSettingsFiles,
@@ -42,6 +43,7 @@ export interface RunSyncOptions {
     includeModelFamilies?: string[];
     abortSignal?: AbortSignal;
   }) => Promise<string[]>;
+  detectProtocol?: (input: { providerBaseUrl: string }) => Promise<ProbeProtocol>;
 }
 
 type ProviderModelsConfig = Record<string, { name: string }>;
@@ -164,17 +166,35 @@ function buildProviderModels(modelIds: string[]): ProviderModelsConfig {
   );
 }
 
+function normalizeAnthropicBaseUrl(url: string): string {
+  return url.replace(/\/$/, '').replace(/\/v1$/, '');
+}
+
+function normalizeOpenAIBaseUrl(url: string): string {
+  const stripped = url.replace(/\/$/, '');
+  return stripped.endsWith('/v1') ? stripped : `${stripped}/v1`;
+}
+
 function buildProviderConfig(
   provider: string,
   providerBaseUrl: string,
   bearerToken: string,
-  modelIds: string[]
+  modelIds: string[],
+  protocol: ProbeProtocol
 ): ProviderConfig {
+  const isAnthropic = protocol === 'anthropic';
+  const npm = isAnthropic ? '@ai-sdk/anthropic' : '@ai-sdk/openai-compatible';
+  const baseURL = isAnthropic
+    ? normalizeAnthropicBaseUrl(providerBaseUrl)
+    : protocol === 'openai-compatible'
+      ? normalizeOpenAIBaseUrl(providerBaseUrl)
+      : providerBaseUrl.replace(/\/$/, '');
+
   return {
-    npm: '@ai-sdk/openai-compatible',
+    npm,
     name: `CCS ${toProviderDisplayName(provider)}`,
     options: {
-      baseURL: providerBaseUrl.replace(/\/$/, ''),
+      baseURL,
       apiKey: bearerToken,
     },
     models: buildProviderModels(modelIds),
@@ -317,6 +337,22 @@ export async function runSync(options: RunSyncOptions): Promise<SyncResult> {
     preferredModelsByProvider: configuredSelections.preferredModelsByProvider,
   });
 
+  const protocolsByProvider: Record<string, ProbeProtocol> = {};
+  if (options.detectProtocol) {
+    await Promise.all(
+      selectedProviders.map(async (provider) => {
+        const providerBaseUrl =
+          configuredSelections.providerBaseUrls[provider] ??
+          `${normalizedCcsConfig.runtimeBaseUrl}/api/provider/${provider}`;
+        const protocol = await options.detectProtocol!({ providerBaseUrl });
+        protocolsByProvider[provider] = protocol;
+        const sdkLabel = protocol === 'anthropic' ? 'anthropic' : 'openai-compatible';
+        const protocolLabel = protocol === 'anthropic' ? 'SSE' : 'JSON';
+        process.stdout.write(`[ccs-sync] ${provider} → ${protocolLabel} → ${sdkLabel}\n`);
+      })
+    );
+  }
+
   const managedProviders: Record<string, ProviderConfig> = Object.fromEntries(
     selectedProviders.map((provider) => [
       toManagedProviderName(provider),
@@ -325,7 +361,8 @@ export async function runSync(options: RunSyncOptions): Promise<SyncResult> {
         configuredSelections.providerBaseUrls[provider] ??
           `${normalizedCcsConfig.runtimeBaseUrl}/api/provider/${provider}`,
         normalizedCcsConfig.bearerToken,
-        modelsByProvider[provider] ?? []
+        modelsByProvider[provider] ?? [],
+        protocolsByProvider[provider] ?? 'unknown'
       ),
     ])
   );

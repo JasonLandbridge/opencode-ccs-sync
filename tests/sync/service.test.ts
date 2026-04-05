@@ -583,4 +583,178 @@ describe('runSync', () => {
     expect(writes[0]).toContain('"baseURL": "http://127.0.0.1:8317/api/provider/claude"');
     expect(writes[0]).not.toContain('/v1');
   });
+
+  it('sets npm to @ai-sdk/anthropic and strips /v1 from baseURL when protocol is anthropic', async () => {
+    const writes: string[] = [];
+
+    await runSync({
+      dryRun: false,
+      cwd: '/workspace',
+      homeDir: '/home/test',
+      readFile: async (filePath: string) => {
+        if (filePath.endsWith('config.yaml')) {
+          return 'cliproxy:\n  providers:\n    - claude\ncliproxy_server:\n  local:\n    port: 8317\n';
+        }
+        if (filePath.endsWith('claude.settings.json')) {
+          return JSON.stringify({
+            env: {
+              ANTHROPIC_BASE_URL: 'http://127.0.0.1:8317/api/provider/claude',
+              ANTHROPIC_MODEL: 'claude-sonnet-4-6',
+            },
+          });
+        }
+        return '{"provider":{},"model":""}';
+      },
+      readDir: async () => ['claude.settings.json'],
+      writeFile: async (_p: string, content: string) => {
+        writes.push(content);
+      },
+      fetchModels: async () => ['claude-sonnet-4-6'],
+      detectProtocol: async () => 'anthropic',
+    });
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toContain('"npm": "@ai-sdk/anthropic"');
+    expect(writes[0]).toContain('"baseURL": "http://127.0.0.1:8317/api/provider/claude"');
+    expect(writes[0]).not.toContain('/v1');
+  });
+
+  it('sets npm to @ai-sdk/openai-compatible and appends /v1 to baseURL when protocol is openai-compatible', async () => {
+    const writes: string[] = [];
+
+    await runSync({
+      dryRun: false,
+      cwd: '/workspace',
+      homeDir: '/home/test',
+      readFile: async (filePath: string) => {
+        if (filePath.endsWith('config.yaml')) {
+          return 'cliproxy:\n  providers:\n    - codex\ncliproxy_server:\n  local:\n    port: 8317\n';
+        }
+        if (filePath.endsWith('codex.settings.json')) {
+          return JSON.stringify({
+            env: {
+              ANTHROPIC_BASE_URL: 'http://127.0.0.1:8317/api/provider/codex',
+              ANTHROPIC_MODEL: 'gpt-5.3-codex',
+            },
+          });
+        }
+        return '{"provider":{},"model":""}';
+      },
+      readDir: async () => ['codex.settings.json'],
+      writeFile: async (_p: string, content: string) => {
+        writes.push(content);
+      },
+      fetchModels: async () => ['gpt-5.3-codex'],
+      detectProtocol: async () => 'openai-compatible',
+    });
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toContain('"npm": "@ai-sdk/openai-compatible"');
+    expect(writes[0]).toContain('"baseURL": "http://127.0.0.1:8317/api/provider/codex/v1"');
+  });
+
+  it('falls back to @ai-sdk/openai-compatible when protocol detection returns unknown', async () => {
+    const writes: string[] = [];
+
+    await runSync({
+      dryRun: false,
+      cwd: '/workspace',
+      homeDir: '/home/test',
+      readFile: async (filePath: string) => {
+        if (filePath.endsWith('config.yaml')) {
+          return 'cliproxy:\n  providers:\n    - ghcp\ncliproxy_server:\n  local:\n    port: 8317\n';
+        }
+        if (filePath.endsWith('ghcp.settings.json')) {
+          return JSON.stringify({
+            env: {
+              ANTHROPIC_BASE_URL: 'http://127.0.0.1:8317/api/provider/ghcp',
+              ANTHROPIC_MODEL: 'claude-sonnet-4.5',
+            },
+          });
+        }
+        return '{"provider":{},"model":""}';
+      },
+      readDir: async () => ['ghcp.settings.json'],
+      writeFile: async (_p: string, content: string) => {
+        writes.push(content);
+      },
+      fetchModels: async () => ['claude-sonnet-4.5'],
+      detectProtocol: async () => 'unknown',
+    });
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toContain('"npm": "@ai-sdk/openai-compatible"');
+  });
+
+  it('supports mixed providers with different protocols in a single sync', async () => {
+    const writes: string[] = [];
+
+    await runSync({
+      dryRun: false,
+      cwd: '/workspace',
+      homeDir: '/home/test',
+      readFile: async (filePath: string) => {
+        if (filePath.endsWith('config.yaml')) {
+          return 'cliproxy:\n  providers:\n    - claude\n    - codex\ncliproxy_server:\n  local:\n    port: 8317\n';
+        }
+        if (filePath.endsWith('claude.settings.json')) {
+          return JSON.stringify({
+            env: {
+              ANTHROPIC_BASE_URL: 'http://127.0.0.1:8317/api/provider/claude',
+              ANTHROPIC_MODEL: 'claude-sonnet-4-6',
+            },
+          });
+        }
+        if (filePath.endsWith('codex.settings.json')) {
+          return JSON.stringify({
+            env: {
+              ANTHROPIC_BASE_URL: 'http://127.0.0.1:8317/api/provider/codex',
+              ANTHROPIC_MODEL: 'gpt-5.3-codex',
+            },
+          });
+        }
+        return '{"provider":{},"model":""}';
+      },
+      readDir: async () => ['claude.settings.json', 'codex.settings.json'],
+      writeFile: async (_p: string, content: string) => {
+        writes.push(content);
+      },
+      fetchModels: async ({ provider }: { provider: string }) =>
+        provider === 'claude' ? ['claude-sonnet-4-6'] : ['gpt-5.3-codex'],
+      detectProtocol: async ({ providerBaseUrl }: { providerBaseUrl: string }) =>
+        providerBaseUrl.includes('claude') ? 'anthropic' : 'openai-compatible',
+    });
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toContain('"ccs-claude"');
+    expect(writes[0]).toContain('"npm": "@ai-sdk/anthropic"');
+    expect(writes[0]).toContain('"baseURL": "http://127.0.0.1:8317/api/provider/claude"');
+    expect(writes[0]).toContain('"ccs-codex"');
+    expect(writes[0]).toContain('"npm": "@ai-sdk/openai-compatible"');
+    expect(writes[0]).toContain('"baseURL": "http://127.0.0.1:8317/api/provider/codex/v1"');
+  });
+
+  it('uses @ai-sdk/openai-compatible when detectProtocol is not provided (backwards compat)', async () => {
+    const writes: string[] = [];
+
+    await runSync({
+      dryRun: false,
+      cwd: '/workspace',
+      homeDir: '/home/test',
+      readFile: async (filePath: string) => {
+        if (filePath.endsWith('config.yaml')) {
+          return 'cliproxy:\n  providers:\n    - claude\n';
+        }
+        return '{"provider":{},"model":""}';
+      },
+      writeFile: async (_p: string, content: string) => {
+        writes.push(content);
+      },
+      fetchModels: async () => ['claude-sonnet-4-6'],
+      // No detectProtocol — backwards compat
+    });
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toContain('"npm": "@ai-sdk/openai-compatible"');
+  });
 });

@@ -66,6 +66,7 @@ describe('opencode-ccs-sync plugin', () => {
       readDir: vi.fn(async () => []),
       writeFile: vi.fn(),
       discoverProviderModels: vi.fn(),
+      detectProtocol: vi.fn(async () => 'unknown' as const),
       pathExists: vi.fn(() => false),
       homeDir: '/home/test',
     });
@@ -117,6 +118,7 @@ describe('opencode-ccs-sync plugin', () => {
       readDir: vi.fn(async () => []),
       writeFile: vi.fn(),
       discoverProviderModels: vi.fn(),
+      detectProtocol: vi.fn(async () => 'unknown' as const),
       pathExists: vi.fn(() => false),
       homeDir: '/home/test',
     });
@@ -176,6 +178,7 @@ describe('opencode-ccs-sync plugin', () => {
       readDir: vi.fn(async () => []),
       writeFile: vi.fn(),
       discoverProviderModels: vi.fn(),
+      detectProtocol: vi.fn(async () => 'unknown' as const),
       pathExists: vi.fn(() => false),
       homeDir: '/home/test',
     });
@@ -223,6 +226,7 @@ describe('opencode-ccs-sync plugin', () => {
       readDir: vi.fn(async () => []),
       writeFile: vi.fn(),
       discoverProviderModels: vi.fn(),
+      detectProtocol: vi.fn(async () => 'unknown' as const),
       pathExists: vi.fn(() => false),
       homeDir: '/home/test',
     });
