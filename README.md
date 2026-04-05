@@ -2,6 +2,8 @@
 
 `opencode-ccs-sync` is an OpenCode plugin that reads your [Claude Code Switch](https://github.com/kaitranntt/ccs) (CCS) configuration and automatically keeps your OpenCode config in sync.
 
+<img width="952" height="760" alt="image" src="https://github.com/user-attachments/assets/f2a4c395-d297-4656-8a20-58a1f6fb9fda" />
+
 It is designed to be safe and repeatable:
 
 - it only manages `ccs-*` providers and their provider-local model lists
