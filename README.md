@@ -1,5 +1,12 @@
 # opencode-ccs-sync
 
+[![npm version](https://img.shields.io/npm/v/opencode-ccs-sync?style=flat-square&logo=npm)](https://www.npmjs.com/package/opencode-ccs-sync)
+[![npm downloads](https://img.shields.io/npm/dm/opencode-ccs-sync?style=flat-square&logo=npm)](https://www.npmjs.com/package/opencode-ccs-sync)
+[![npm license](https://img.shields.io/npm/l/opencode-ccs-sync?style=flat-square)](https://github.com/JasonLandbridge/opencode-ccs-sync/blob/master/LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/JasonLandbridge/opencode-ccs-sync/pr.yml?branch=master&style=flat-square&logo=github&label=CI)](https://github.com/JasonLandbridge/opencode-ccs-sync/actions)
+[![release](https://img.shields.io/github/actions/workflow/status/JasonLandbridge/opencode-ccs-sync/release.yml?branch=master&style=flat-square&logo=github&label=release)](https://github.com/JasonLandbridge/opencode-ccs-sync/actions)
+[![GitHub issues](https://img.shields.io/github/issues/JasonLandbridge/opencode-ccs-sync?style=flat-square&logo=github)](https://github.com/JasonLandbridge/opencode-ccs-sync/issues)
+
 `opencode-ccs-sync` is an OpenCode plugin that reads your [Claude Code Switch](https://github.com/kaitranntt/ccs) (CCS) configuration and automatically keeps your OpenCode config in sync.
 
 <img width="952" height="760" alt="image" src="https://github.com/user-attachments/assets/f2a4c395-d297-4656-8a20-58a1f6fb9fda" />
@@ -17,10 +24,10 @@ It is designed to be safe and repeatable:
 
 You MUST have all of the following working first:
 
-1. **[OpenCode installed and running](https://opencode.ai/)** 
+1. **[OpenCode installed and running](https://opencode.ai/)**
 2. **[CCS installed and configured](https://docs.ccs.kaitran.ca)**
 3. **[CLIProxy reachable from your machine](https://help.router-for.me/)**
-4. **A CCS config file at `~/.ccs/config.yaml`, see CCS Install** 
+4. **A CCS config file at `~/.ccs/config.yaml`, see CCS Install**
 
 If CCS itself is not healthy, this plugin cannot fix that for you. It only syncs CCS state
 into OpenCode.
@@ -64,7 +71,6 @@ The normal user flow is therefore:
 2. restart OpenCode
 3. let the plugin perform its automatic startup sync
 4. edit CCS config as needed and let the plugin re-sync automatically
-
 
 ## Managed scope
 
@@ -253,7 +259,6 @@ That means:
 
 This automatic lifecycle is the primary user-facing behavior. You SHOULD think of this as a
 background syncing plugin, not a manual command you have to keep invoking.
-
 
 ## How default model selection works
 
