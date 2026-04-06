@@ -1,6 +1,6 @@
 {
   "name": "opencode-ccs-sync",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Automatically syncs CCS (Claude Code Switch) CLIProxy providers and models with OpenCode",
   "keywords": [
     "opencode",

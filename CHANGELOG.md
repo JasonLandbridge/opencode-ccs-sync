@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/JasonLandbridge/opencode-ccs-sync/compare/v1.0.0...v1.0.1) (2026-04-06)
+
+
+### Bug Fixes
+
+* **sync:** clear stale providers and cap retries when CLIProxy unavailable on startup ([24576b0](https://github.com/JasonLandbridge/opencode-ccs-sync/commit/24576b0feba52fb754eb945e22c2257275219039))
+
 ## 1.0.0 (2026-04-05)
 
 
