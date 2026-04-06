@@ -22,6 +22,7 @@ export interface DiscoverProviderModelsOptions {
   fetchFn?: FetchLike;
   sleep?: (delayMs: number) => Promise<void>;
   abortSignal?: AbortSignal;
+  maxAttempts?: number;
 }
 
 function asNonEmptyString(value: unknown): string | undefined {
@@ -110,6 +111,7 @@ export async function discoverProviderModels(
   const sleep: (delayMs: number) => Promise<void> = options.sleep ?? defaultSleep;
   const endpoint: string = buildModelsEndpoint(options.runtimeBaseUrl, options.provider);
 
+  const maxAttempts = options.maxAttempts ?? 5;
   let attempt = 0;
   while (true) {
     try {
@@ -133,6 +135,10 @@ export async function discoverProviderModels(
       }
 
       if (classifyRetryableDiscoveryError(error) === 'fail') {
+        throw error;
+      }
+
+      if (attempt >= maxAttempts - 1) {
         throw error;
       }
 

@@ -2,6 +2,8 @@ import { watch } from 'chokidar';
 import { createHash } from 'node:crypto';
 import { dirname, normalize } from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { resolveCcsConfigPath, resolveOpenCodeConfigPath } from '../config/paths.js';
+import { applyManagedConfigSync, hasEffectiveChanges } from '../opencode/patch.js';
 import type { RunSyncOptions, SyncResult } from '../sync/service.js';
 import { runSync } from '../sync/service.js';
 
@@ -95,9 +97,55 @@ export function shouldTriggerWatchSync(
   return fileName.endsWith('.settings.json');
 }
 
+async function clearManagedProviders(options: RunWatchModeOptions, resolvedPaths: { opencodeConfigPath: string; ccsConfigPath: string }): Promise<void> {
+  try {
+    const currentConfig = await options.readFile(resolvedPaths.opencodeConfigPath);
+    const cleared = applyManagedConfigSync(currentConfig, { providers: {}, defaultModel: '' });
+    if (hasEffectiveChanges(currentConfig, cleared)) {
+      await options.writeFile(resolvedPaths.opencodeConfigPath, cleared);
+    }
+  } catch {
+    // If config is unreadable/unwritable, there's nothing to clear
+  }
+}
+
 export async function runWatchMode(options: RunWatchModeOptions): Promise<SyncResult> {
   const guard = createWriteLoopGuard({ suppressionWindowMs: 1500 });
-  let lastResult: SyncResult = await runSync({ ...options, watch: true });
+
+  let lastResult: SyncResult;
+  try {
+    lastResult = await runSync({ ...options, watch: true });
+  } catch (startupError) {
+    // CCS/CLIProxy unavailable on startup — resolve paths independently and clear stale
+    // ccs-* providers from opencode.json so broken entries don't persist across restarts.
+    const opencodeConfigPath = resolveOpenCodeConfigPath({
+      explicitPath: options.opencodeConfigPath,
+      cwd: options.cwd,
+      homeDir: options.homeDir,
+      exists: options.pathExists,
+    });
+    const ccsConfigPath = resolveCcsConfigPath({
+      explicitPath: options.ccsConfigPath,
+      cwd: options.cwd,
+      homeDir: options.homeDir,
+    });
+    const resolvedPaths = { opencodeConfigPath, ccsConfigPath };
+
+    if (!options.dryRun) {
+      await clearManagedProviders(options, resolvedPaths);
+    }
+
+    // Synthesize a failed result so watch mode can still set up file watching.
+    // When CCS becomes available and writes a .settings.json, the next sync will succeed.
+    lastResult = {
+      ok: false,
+      mode: 'watch',
+      changed: false,
+      resolvedPaths,
+      providers: [],
+      summary: 'CCS startup sync failed — waiting for CCS to become available.',
+    };
+  }
 
   if (lastResult.changed && !options.dryRun) {
     const initialHash = await safeReadHash(lastResult.resolvedPaths.opencodeConfigPath);
